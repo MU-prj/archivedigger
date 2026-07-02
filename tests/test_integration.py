@@ -28,3 +28,25 @@ def test_real_get_item_has_files():
     item = client.get_item(identifier)
     assert item.identifier == identifier
     assert isinstance(item.files, list)
+
+
+def test_real_download_file_lands_at_local_path(tmp_path):
+    import hashlib
+
+    client = InternetArchiveClient()
+    query = build_query(Config.build().search)
+    small = None
+    for identifier in client.search(query, sort="downloads desc", max_items=10):
+        item = client.get_item(identifier)
+        sized = [f for f in item.files if f.size and "/" not in f.name]
+        if sized:
+            small = min(sized, key=lambda f: f.size)
+            break
+    assert small is not None, "nessun item con file dimensionati trovato"
+    local_path = tmp_path / small.name
+    client.download_file(item, small, local_path)
+
+    assert local_path.exists()
+    if small.md5:
+        got = hashlib.md5(local_path.read_bytes()).hexdigest()
+        assert got == small.md5

@@ -75,5 +75,5 @@ class InternetArchiveClient:
             files=[file.name],
             destdir=str(local_path.parent),
             no_directory=True,
-            silent=True,
+            verbose=False,
         )
