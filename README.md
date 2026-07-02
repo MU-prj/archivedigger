@@ -41,6 +41,55 @@ Per lo sviluppo locale:
 make venv install test
 ```
 
+## Uso come CLI
+
+```sh
+# Elenca i profili preset
+archivedigger profiles
+
+# Esegui un job dichiarativo (YAML), con override da flag
+archivedigger run docs/example-job.yaml --max-items 50 --dry-run
+
+# Solo ricerca: stampa gli identifier che matchano
+archivedigger search --collection field-recordings --license cc --min-downloads 100
+
+# Stima (dry-run) di quanto scaricheresti
+archivedigger estimate --profile corpus --collection etree
+
+# Download reale con profilo + preferenza di formato + budget
+archivedigger run --profile corpus \
+    --creator "John Coltrane" \
+    --prefer "Flac=AIFF=WAVE>VBR MP3" \
+    --min-duration 30 --dedup \
+    --destdir ./downloads --size-budget 20
+
+# Esporta il manifest in CSV
+archivedigger export-manifest ./downloads/manifest.jsonl -o report.csv
+```
+
+La precedenza è: **flag CLI > job YAML > profilo > default**. Nessun filtro
+impostato significa nessuna restrizione.
+
+## Uso come libreria (external)
+
+```python
+from archivedigger import Config, dig
+
+config = Config.build(
+    profile="corpus",
+    job={
+        "search": {"collection": ["field-recordings"], "license": "cc"},
+        "filters": {"min_duration": 30, "dedup": True},
+        "download": {"destdir": "./corpus", "size_budget_gb": 10},
+    },
+)
+report = dig(config)
+print(report.downloaded, report.bytes_downloaded)
+```
+
+Le strategy (formati, filtri file, resume, layout) sono estendibili: un repo
+consumatore può registrare le proprie senza modificare il core.
+
 ## Struttura
 
 ```
