@@ -1,0 +1,32 @@
+# Job di test: max 1GB di audio NON musicale (ambientale/concreto/voci/radio).
+# Preferenza lossless>lossy, solo dedup MD5.
+#   archivedigger estimate docs/test-job-ambient.yaml   # stima
+#   archivedigger run      docs/test-job-ambient.yaml   # download reale
+profile: corpus
+
+search:
+  # subject mirati a suoni non musicali; OR tra i termini (item che matcha
+  # almeno uno). Esclude di fatto la musica composta.
+  subject:
+    - field recording
+    - soundscape
+    - nature sounds
+    - spoken word
+  sort: downloads desc
+  max_items: 40
+
+files:
+  # gia' ereditato dal profilo corpus, esplicitato per chiarezza:
+  prefer:
+    - [Flac, AIFF, WAVE]
+    - [VBR MP3, Ogg Vorbis]
+  source: original
+
+filters:
+  dedup: true          # solo dedup MD5, nessun filtro durata/size
+
+download:
+  destdir: ./test-download
+  layout: collection
+  size_budget_gb: 1    # tetto reale: si ferma superato 1GB
+  manifest: ./test-download/manifest.jsonl

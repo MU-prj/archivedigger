@@ -229,7 +229,12 @@ def main(argv: list[str] | None = None, client: Client | None = None) -> int:
         return 0
 
     if args.command == "estimate":
-        config.download.dry_run = True
+        est = api.estimate(config, client=client)
+        print(
+            f"item: {est.items}  file: {est.files}  "
+            f"totale: {est.bytes} byte ({est.gigabytes:.2f} GB)"
+        )
+        return 0
 
     report = api.dig(config, client=client)
     print(

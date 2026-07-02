@@ -38,6 +38,28 @@ def test_dig_runs_download_and_returns_report(tmp_path):
     assert client.downloaded == ["a.flac"]
 
 
+def test_estimate_reports_items_files_and_bytes(tmp_path):
+    files = [
+        IAFile(name="a.flac", format="Flac", size=600),
+        IAFile(name="b.flac", format="Flac", size=400),
+    ]
+    cfg = Config.build(job={"download": {"destdir": str(tmp_path)}})
+    client = FakeClient([_item("i1"), IAItem("i2", {"collection": "x"}, files)])
+    est = api.estimate(cfg, client=client)
+    assert est.items == 2
+    assert est.files == 3
+    assert est.bytes == 1 + 600 + 400  # _item() ha un file da 1 byte
+
+
+def test_estimate_respects_budget(tmp_path):
+    files = [IAFile(name=f"{i}.flac", format="Flac", size=1024**3) for i in range(5)]
+    items = [IAItem(f"i{i}", {"collection": "x"}, [f]) for i, f in enumerate(files)]
+    cfg = Config.build(job={"download": {"destdir": str(tmp_path), "size_budget_gb": 2}})
+    est = api.estimate(cfg, client=FakeClient(items))
+    assert est.files <= 3
+    assert est.bytes >= 2 * 1024**3
+
+
 def test_search_returns_identifiers():
     cfg = Config.build(job={"search": {"max_items": 10}})
     client = FakeClient([_item("a"), _item("b")])

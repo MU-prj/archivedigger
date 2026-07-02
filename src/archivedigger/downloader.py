@@ -34,6 +34,17 @@ class PlannedFile:
 
 
 @dataclass
+class Estimate:
+    items: int = 0
+    files: int = 0
+    bytes: int = 0
+
+    @property
+    def gigabytes(self) -> float:
+        return self.bytes / 1024**3
+
+
+@dataclass
 class DownloadReport:
     items: int = 0
     downloaded: int = 0
@@ -73,6 +84,18 @@ class Downloader:
             for f in selected:
                 planned.append(PlannedFile(item, f, self.layout.path_for(destdir, item, f)))
         return planned
+
+    def estimate(self) -> Estimate:
+        """Stima (sola lettura) di item/file/byte che verrebbero scaricati.
+
+        Applica il budget come il download reale, cosi' la stima combacia.
+        """
+        planned = self._apply_budget(self.plan())
+        return Estimate(
+            items=len({p.item.identifier for p in planned}),
+            files=len(planned),
+            bytes=sum(p.file.size or 0 for p in planned),
+        )
 
     def run(self) -> DownloadReport:
         report = DownloadReport()
