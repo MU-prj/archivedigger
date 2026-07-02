@@ -1,0 +1,23 @@
+# Profilo "mirror" — archiviazione fedele di collezioni intere.
+# Priorita' alla completezza: tutti i file originali, struttura per item,
+# checksum, nessuna selezione di formato che scarti dei file.
+profile: mirror
+
+search:
+  mediatype: [audio, etree]
+  sort: "addeddate desc"
+  max_items: 100
+
+files:
+  source: original              # solo i file originali caricati, non i derivati
+  # nessun 'prefer' e nessun 'formats': si scarica tutto cio' che e' original
+
+filters:
+  dedup: false                  # in un mirror i duplicati apparenti vanno tenuti
+
+download:
+  layout: collection
+  workers: 4
+  retries: 3
+  resume: checksum
+  ignore_errors: true

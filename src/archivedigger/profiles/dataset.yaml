@@ -1,0 +1,27 @@
+# Profilo "dataset" — grandi volumi per ML / MIR.
+# Priorita' a formati compressi uniformi, dedup aggressivo, budget ampi.
+profile: dataset
+
+search:
+  mediatype: [audio]            # per un dataset omogeneo di solito basta 'audio'
+  sort: "downloads desc"
+  max_items: 1000
+
+files:
+  # Un solo formato compresso uniforme per tutto il dataset.
+  prefer:
+    - [VBR MP3]
+    - [Ogg Vorbis, 128Kbps MP3]
+  source: derivative            # i derivati compressi generati da IA
+
+filters:
+  dedup: true
+  min_duration: 5               # scarta clip troppo brevi (secondi)
+
+download:
+  layout: collection
+  workers: 4
+  retries: 3
+  resume: fast-skip             # su volumi enormi salta per sola esistenza
+  ignore_errors: true
+  size_budget_gb: 50

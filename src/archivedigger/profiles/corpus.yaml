@@ -1,0 +1,27 @@
+# Profilo "corpus" — materia prima per elaborazione audio (audiolayers / PGE).
+# Priorita' alla qualita' del segnale: lossless quando disponibile, un file per
+# brano (niente duplicati di formato), dedup MD5, metadati per file nel manifest.
+profile: corpus
+
+search:
+  mediatype: [audio, etree]     # etree = Live Music Archive (spesso lossless)
+  sort: "downloads desc"
+  max_items: 100
+
+files:
+  # Catena di preferenza: FLAC/AIFF/WAVE a pari merito sopra tutto il resto,
+  # poi fallback ai lossy. Per ogni item si scarica solo il migliore disponibile.
+  prefer:
+    - [Flac, AIFF, WAVE]
+    - [VBR MP3, Ogg Vorbis]
+  source: original
+
+filters:
+  dedup: true                   # salta file con MD5 gia' visto nel manifest
+
+download:
+  layout: collection            # destdir/<collection>/<identifier>/<file>
+  workers: 4
+  retries: 3
+  resume: checksum              # verifica MD5 dei file gia' presenti
+  ignore_errors: true

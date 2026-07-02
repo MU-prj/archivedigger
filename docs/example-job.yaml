@@ -1,0 +1,55 @@
+# Esempio di job dichiarativo archivedigger.
+#   archivedigger run docs/example-job.yaml
+#
+# Ogni campo qui e' sovrascrivibile da flag CLI (la flag vince sullo YAML, che
+# vince sul profilo, che vince sui default). Tutti i campi sono opzionali:
+# cio' che ometti resta al default del profilo, e senza filtri non si applica
+# nessuna restrizione alla ricerca.
+
+profile: corpus                 # base di partenza; i campi sotto la sovrascrivono
+
+search:
+  # Filtri item-level (campi indicizzati di Internet Archive).
+  collection: [field-recordings, radioprogramsandaudio]
+  creator: null
+  subject: [nature, ambient]
+  language: null
+  date_from: "1990-01-01"
+  date_to: "2020-12-31"
+  added_after: null             # data di upload su IA
+  license: cc                   # publicdomain | cc | cc-commercial | any
+  min_downloads: 50
+  min_item_size: null
+  max_item_size: null
+  query: null                   # via di fuga: sintassi Lucene grezza
+  sort: "downloads desc"
+  max_items: 200
+
+files:
+  # Selezione formati: 'prefer' (catena) OPPURE 'formats' (lista esatta).
+  prefer:
+    - [Flac, AIFF, WAVE]
+    - [VBR MP3]
+  # formats: [Flac]             # alternativa: solo questi formati esatti
+  glob: null                    # es. "*.flac"
+  exclude_glob: null
+  source: original              # original | derivative
+
+filters:
+  # Filtri file-level client-side (strategy componibili).
+  min_duration: 30              # secondi, o "hh:mm:ss"
+  max_duration: null
+  min_file_size: "500K"
+  max_file_size: null
+  dedup: true
+
+download:
+  destdir: ./downloads
+  layout: collection            # collection | item | flat
+  workers: 4
+  retries: 3
+  resume: checksum              # checksum | fast-skip | force
+  ignore_errors: true
+  size_budget_gb: 20
+  dry_run: false                # true = stima item/file/GB senza scaricare
+  manifest: ./downloads/manifest.jsonl

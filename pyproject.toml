@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "archivedigger"
+version = "0.1.0"
+description = "Bulk audio downloader per Internet Archive: job YAML dichiarativi, filtri a strategy, manifest riavviabili"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "CC-BY-4.0" }
+authors = [{ name = "Domenico Nasso" }]
+keywords = ["internet-archive", "audio", "downloader", "corpus", "dataset"]
+dependencies = [
+    "internetarchive>=4.1",
+    "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.4",
+]
+
+[project.scripts]
+archivedigger = "archivedigger.cli:main"
+
+[project.urls]
+Repository = "https://github.com/MU-prj/archivedigger"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+archivedigger = ["profiles/*.yaml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "integration: test che toccano Internet Archive reale (esclusi di default)",
+]
+addopts = "-m 'not integration'"
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]

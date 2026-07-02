@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Ambienti
+.venv/
+venv/
+
+# Test e tooling
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Output di download locali (mai nel repo)
+downloads/
+*.jsonl
+
+# IDE / OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
