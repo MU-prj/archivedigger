@@ -26,5 +26,5 @@ filters:
 
 download:
   destdir: ./test-download-clips
-  layout: collection
+  # layout flat (default): tutte le clip in un'unica cartella, nomi identifier__file
   manifest: ./test-download-clips/manifest.jsonl

@@ -20,7 +20,7 @@ filters:
   dedup: true                   # salta file con MD5 gia' visto nel manifest
 
 download:
-  layout: collection            # destdir/<collection>/<identifier>/<file>
+  # layout ereditato dal default (flat: tutto in destdir, nomi identifier__file)
   workers: 4
   retries: 3
   resume: checksum              # verifica MD5 dei file gia' presenti

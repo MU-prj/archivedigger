@@ -1,11 +1,17 @@
 """DiskLayout: strategy che decidono il percorso locale di ogni file (D14).
 
-- CollectionLayout: destdir/<collection>/<identifier>/<file>  (default)
+- FlatLayout:       destdir/<identifier>__<file>            (default)
+- CollectionLayout: destdir/<collection>/<identifier>/<file>
 - ItemLayout:       destdir/<identifier>/<file>
-- FlatLayout:       destdir/<file>
+
+FlatLayout mette tutto in un'unica cartella: prefissa il nome file con
+l'identifier (e appiattisce eventuali sottocartelle) per evitare collisioni tra
+item diversi con file omonimi. Categorizzare in sottocartelle e' opzionale
+(collection/item).
 
 Se un item non ha collezione, CollectionLayout ripiega sul solo identifier.
-I nomi file di IA possono contenere sottocartelle ("/"): vengono preservate.
+I nomi file di IA possono contenere sottocartelle ("/"): CollectionLayout e
+ItemLayout le preservano, FlatLayout le appiattisce con "__".
 """
 
 from __future__ import annotations
@@ -51,7 +57,9 @@ class ItemLayout:
 
 class FlatLayout:
     def path_for(self, destdir: Path, item: IAItem, file: IAFile) -> Path:
-        return destdir / _rel_name(file.name)
+        parts = [_safe(p) for p in file.name.split("/") if p not in ("", ".", "..")]
+        flat = "__".join(parts) if parts else "_"
+        return destdir / f"{_safe(item.identifier)}__{flat}"
 
 
 _LAYOUTS: dict[str, type[DiskLayout]] = {
