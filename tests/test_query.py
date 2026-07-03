@@ -76,13 +76,16 @@ def test_license_publicdomain():
 
 
 def test_license_cc_matches_all_creative_commons():
+    # Gli slash NON escapati dentro un wildcard fanno tornare 0 righe
+    # all'API scrape di IA: la clausola deve usare \/ (bug 2026-07-03).
     q = build_query(SearchConfig(license="cc"))
-    assert "licenseurl:(*creativecommons.org/licenses/*)" in q
+    assert r"licenseurl:(*creativecommons.org\/licenses\/*)" in q
+    assert "licenseurl:(*creativecommons.org/licenses/*)" not in q
 
 
 def test_license_cc_commercial_excludes_noncommercial():
     q = build_query(SearchConfig(license="cc-commercial"))
-    assert "*creativecommons.org/licenses/*" in q
+    assert r"*creativecommons.org\/licenses\/*" in q
     assert "NOT licenseurl:*nc*" in q
 
 
@@ -90,7 +93,7 @@ def test_license_url_exact_takes_over_preset():
     url = "http://creativecommons.org/licenses/by/4.0/"
     q = build_query(SearchConfig(license="cc", license_url=url))
     assert f'licenseurl:"{url}"' in q
-    assert "*creativecommons.org/licenses/*" not in q
+    assert r"*creativecommons.org\/licenses\/*" not in q
 
 
 def test_unknown_license_preset_raises():
