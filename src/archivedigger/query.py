@@ -87,11 +87,13 @@ class DateRangeFilter:
 
 
 # Preset licenza -> pattern Lucene su licenseurl.
+# Gli slash dentro un wildcard vanno escapati (\/): non escapati, l'API
+# scrape di IA restituisce silenziosamente 0 risultati (verificato 2026-07-03).
 _LICENSE_PRESETS: dict[str, str] = {
     "any": "",
     "publicdomain": "licenseurl:(*publicdomain*)",
-    "cc": "licenseurl:(*creativecommons.org/licenses/*)",
-    "cc-commercial": "licenseurl:(*creativecommons.org/licenses/*) AND NOT licenseurl:*nc*",
+    "cc": r"licenseurl:(*creativecommons.org\/licenses\/*)",
+    "cc-commercial": r"licenseurl:(*creativecommons.org\/licenses\/*) AND NOT licenseurl:*nc*",
 }
 
 
