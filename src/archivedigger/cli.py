@@ -48,6 +48,7 @@ _SCALAR_MAP: dict[str, tuple[str, str]] = {
     "max_duration": ("filters", "max_duration"),
     "min_file_size": ("filters", "min_file_size"),
     "max_file_size": ("filters", "max_file_size"),
+    "max_files_per_item": ("filters", "max_files_per_item"),
     "destdir": ("download", "destdir"),
     "layout": ("download", "layout"),
     "workers": ("download", "workers"),
@@ -116,6 +117,7 @@ def _add_common_flags(p: argparse.ArgumentParser) -> None:
     p.add_argument("--max-duration", dest="max_duration")
     p.add_argument("--min-file-size", dest="min_file_size")
     p.add_argument("--max-file-size", dest="max_file_size")
+    p.add_argument("--max-files-per-item", dest="max_files_per_item", type=int)
     p.add_argument("--dedup", action="store_true", default=None)
     # download
     p.add_argument("--destdir")
@@ -229,7 +231,12 @@ def main(argv: list[str] | None = None, client: Client | None = None) -> int:
         return 0
 
     if args.command == "estimate":
-        config.download.dry_run = True
+        est = api.estimate(config, client=client)
+        print(
+            f"item: {est.items}  file: {est.files}  "
+            f"totale: {est.bytes} byte ({est.gigabytes:.2f} GB)"
+        )
+        return 0
 
     report = api.dig(config, client=client)
     print(

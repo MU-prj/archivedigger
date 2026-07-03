@@ -35,16 +35,26 @@ def test_item_layout():
     assert p == dest / "show1" / "a.flac"
 
 
-def test_flat_layout():
+def test_flat_layout_prefixes_identifier_to_avoid_collisions():
     dest = Path("/downloads")
     p = FlatLayout().path_for(dest, _item(), IAFile(name="a.flac"))
-    assert p == dest / "a.flac"
+    assert p == dest / "show1__a.flac"
+
+
+def test_flat_layout_flattens_subpaths():
+    dest = Path("/downloads")
+    p = FlatLayout().path_for(dest, _item(), IAFile(name="disc1/a.flac"))
+    assert p == dest / "show1__disc1__a.flac"
+
+
+def test_flat_layout_is_the_default():
+    assert isinstance(build_layout(DownloadConfig()), FlatLayout)
 
 
 def test_build_layout_from_config():
     assert isinstance(build_layout(DownloadConfig(layout="item")), ItemLayout)
+    assert isinstance(build_layout(DownloadConfig(layout="collection")), CollectionLayout)
     assert isinstance(build_layout(DownloadConfig(layout="flat")), FlatLayout)
-    assert isinstance(build_layout(DownloadConfig()), CollectionLayout)
 
 
 def test_build_layout_unknown_raises():

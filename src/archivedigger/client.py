@@ -67,6 +67,8 @@ class InternetArchiveClient:
         return IAItem(identifier=identifier, metadata=metadata, files=files)
 
     def download_file(self, item: IAItem, file: IAFile, local_path: Path) -> None:
+        import shutil
+
         import internetarchive
 
         local_path.parent.mkdir(parents=True, exist_ok=True)
@@ -75,5 +77,17 @@ class InternetArchiveClient:
             files=[file.name],
             destdir=str(local_path.parent),
             no_directory=True,
-            silent=True,
+            verbose=False,
         )
+        # internetarchive scrive col nome IA (file.name) dentro destdir; il
+        # layout puo' voler un basename diverso (es. flat: identifier__file).
+        # Se differisce, sposto il file sul percorso scelto.
+        parts = [p for p in file.name.split("/") if p not in ("", ".", "..")]
+        landed = local_path.parent.joinpath(*parts) if parts else local_path
+        if landed != local_path and landed.exists():
+            shutil.move(str(landed), str(local_path))
+            # rimuove le sottocartelle rimaste vuote (nomi IA con sottopercorsi)
+            parent = landed.parent
+            while parent != local_path.parent and parent.is_dir() and not any(parent.iterdir()):
+                parent.rmdir()
+                parent = parent.parent

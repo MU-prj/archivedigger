@@ -45,7 +45,7 @@ def test_downloads_single_file(tmp_path):
     report = Downloader(client, _config(tmp_path)).run()
     assert report.downloaded == 1
     assert client.downloaded == ["a.flac"]
-    assert (tmp_path / "jazz" / "show1" / "a.flac").exists()
+    assert (tmp_path / "show1__a.flac").exists()  # flat e' il default
 
 
 def test_second_run_skips_already_downloaded(tmp_path):

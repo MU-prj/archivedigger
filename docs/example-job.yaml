@@ -45,7 +45,7 @@ filters:
 
 download:
   destdir: ./downloads
-  layout: collection            # collection | item | flat
+  layout: flat                  # flat (default) | collection | item
   workers: 4
   retries: 3
   resume: checksum              # checksum | fast-skip | force

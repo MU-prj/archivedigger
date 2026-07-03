@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from .client import Client, InternetArchiveClient
 from .config import Config
-from .downloader import Downloader, DownloadReport
+from .downloader import Downloader, DownloadReport, Estimate
 from .manifest import Manifest
 from .query import build_query
 
@@ -19,6 +19,13 @@ def dig(config: Config, client: Client | None = None) -> DownloadReport:
     client = client or InternetArchiveClient()
     manifest = Manifest(config.download.manifest) if config.download.manifest else None
     return Downloader(client, config, manifest=manifest).run()
+
+
+def estimate(config: Config, client: Client | None = None) -> Estimate:
+    """Stima item/file/byte che il download produrrebbe, senza scaricare."""
+    client = client or InternetArchiveClient()
+    manifest = Manifest(config.download.manifest) if config.download.manifest else None
+    return Downloader(client, config, manifest=manifest).estimate()
 
 
 def search(config: Config, client: Client | None = None) -> list[str]:

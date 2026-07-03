@@ -62,12 +62,13 @@ class FiltersConfig:
     min_file_size: str | None = None
     max_file_size: str | None = None
     dedup: bool = False
+    max_files_per_item: int | None = None
 
 
 @dataclass
 class DownloadConfig:
     destdir: str = "./downloads"
-    layout: str = "collection"
+    layout: str = "flat"
     workers: int = 4
     retries: int = 3
     resume: str = "checksum"

@@ -16,6 +16,7 @@ filters:
   dedup: false                  # in un mirror i duplicati apparenti vanno tenuti
 
 download:
+  # un mirror di solito vuole la struttura per collezione, non flat
   layout: collection
   workers: 4
   retries: 3

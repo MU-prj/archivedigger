@@ -19,7 +19,7 @@ filters:
   min_duration: 5               # scarta clip troppo brevi (secondi)
 
 download:
-  layout: collection
+  # layout ereditato dal default (flat): dataset uniforme in un'unica cartella
   workers: 4
   retries: 3
   resume: fast-skip             # su volumi enormi salta per sola esistenza
