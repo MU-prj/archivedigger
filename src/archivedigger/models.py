@@ -24,18 +24,36 @@ class IAFile:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> IAFile:
-        """Costruisce da un dict di metadati file di internetarchive."""
+        """Costruisce da un dict di metadati file di internetarchive.
+
+        I metadati di IA sono sporchi: campi che arrivano come lista
+        (si prende il primo valore) o non parsabili (diventano None,
+        metrica ignota: la decisione passa alla catena di filtri).
+        Un file illeggibile non deve far crollare l'intero plan().
+        """
         from .units import parse_duration
 
-        size = data.get("size")
         return cls(
             name=data.get("name", ""),
             format=data.get("format"),
-            size=int(size) if size is not None else None,
+            size=_lenient(int, data.get("size")),
             md5=data.get("md5"),
-            length=parse_duration(data.get("length")),
+            length=_lenient(parse_duration, data.get("length")),
             source=data.get("source"),
         )
+
+
+def _lenient(parse, value):
+    """Applica `parse` a un metadato sporco: liste → primo elemento,
+    valori mancanti o non parsabili → None."""
+    if isinstance(value, list):
+        value = value[0] if value else None
+    if value is None:
+        return None
+    try:
+        return parse(value)
+    except (ValueError, TypeError):
+        return None
 
 
 @dataclass
