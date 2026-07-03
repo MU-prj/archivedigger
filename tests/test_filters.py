@@ -4,6 +4,7 @@ from archivedigger.config import FiltersConfig
 from archivedigger.filters import (
     DurationFilter,
     FileSizeFilter,
+    MaxFilesPerItemFilter,
     Md5DedupFilter,
     build_file_filter,
 )
@@ -28,6 +29,26 @@ def test_duration_filter_max_and_clock_format():
 def test_duration_filter_keeps_files_without_length():
     files = [IAFile(name="unknown.mp3", length=None)]
     assert DurationFilter(min_duration=30).apply(files) == files
+
+
+def test_max_files_per_item_keeps_first_n():
+    files = [IAFile(name=f"{i}.flac") for i in range(5)]
+    kept = MaxFilesPerItemFilter(1).apply(files)
+    assert [f.name for f in kept] == ["0.flac"]
+    assert MaxFilesPerItemFilter(3).apply(files) == files[:3]
+
+
+def test_max_files_per_item_stateless_across_calls():
+    # ogni item e' una chiamata apply separata: il cap non e' cumulativo
+    filt = MaxFilesPerItemFilter(1)
+    assert len(filt.apply([IAFile(name="a")])) == 1
+    assert len(filt.apply([IAFile(name="b")])) == 1
+
+
+def test_build_file_filter_includes_cap_last():
+    cfg = FiltersConfig(dedup=True, max_files_per_item=2)
+    chain = build_file_filter(cfg)
+    assert isinstance(chain.filters[-1], MaxFilesPerItemFilter)
 
 
 def test_file_size_filter_bounds():

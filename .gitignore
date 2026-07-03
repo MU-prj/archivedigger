@@ -17,6 +17,8 @@ htmlcov/
 
 # Output di download locali (mai nel repo)
 downloads/
+test-download/
+test-download-clips/
 *.jsonl
 
 # IDE / OS

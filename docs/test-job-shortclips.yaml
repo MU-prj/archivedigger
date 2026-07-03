@@ -1,0 +1,30 @@
+# Job di test: ~20 clip audio corte (5-10s), UN file per item.
+# Dimostra la modalita' di selezione per-item (max_files_per_item: 1).
+#   archivedigger estimate docs/test-job-shortclips.yaml
+#   archivedigger run      docs/test-job-shortclips.yaml
+profile: corpus
+
+search:
+  mediatype: [audio]
+  subject:
+    - sound effects
+    - sound effect
+  sort: downloads desc
+  max_items: 35
+
+files:
+  # per clip corte va bene qualsiasi formato: preferenza leggera lossless>lossy
+  prefer:
+    - [Flac, AIFF, WAVE, VBR MP3]
+  source: original
+
+filters:
+  min_duration: 5          # secondi
+  max_duration: 10
+  max_files_per_item: 1    # UN file per item (campionamento)
+  dedup: true
+
+download:
+  destdir: ./test-download-clips
+  layout: collection
+  manifest: ./test-download-clips/manifest.jsonl

@@ -15,9 +15,12 @@ esistono, ma NON sono ancora cablati nella pipeline di selezione. Da fare:
   original` tenga solo gli original; glob `*.flac` filtri per nome.
 
 ### B. Filtri file aggiuntivi (rimandati nel grill)
-- `--max-files-per-item N`: campiona solo N tracce per item (strategy che tronca
-  la lista dopo gli altri filtri).
+- ~~`--max-files-per-item N`: campiona N tracce per item~~ FATTO (2026-07-03):
+  `MaxFilesPerItemFilter`, ultimo nella catena; flag `--max-files-per-item`,
+  campo `filters.max_files_per_item`. Con N=1 = un file per item.
 - Filtro per bitrate / sample rate se presente nei metadati file.
+- Nota: `DurationFilter` tiene i file con `length` sconosciuto (non li scarta).
+  Se serve durata rigida, valutare opzione "drop unknown-length".
 
 ### C. Esclusione contenuti (utile per "no musica")
 IA non distingue musica da non-musica via mediatype (tutto e' `audio`). Valutare:
@@ -51,4 +54,18 @@ dedup MD5.
 - Esito e osservazioni: da annotare qui sotto dopo il run.
 
 ### Note post-run
-_(da compilare)_
+
+**Test 1 — 1GB no musica (`test-job-ambient.yaml`)**
+- Esito: 12 file, 0 errori, 1.09 GB, 226s.
+- Bug trovato e corretto: `download_file` passava `silent=` inesistente in
+  internetarchive 5.x → ogni download falliva. Colmato con test d'integrazione.
+- Osservazione chiave: budget + preferenza lossless si esauriscono sul PRIMO
+  item (subject "soundscape" → un audiolibro LOTR da 12 tracce). Manca varieta':
+  serve cap per-item o round-robin. → motivato il feature B.
+
+**Test 2 — ~20 clip corte 5-10s, 1/item (`test-job-shortclips.yaml`)**
+- Feature B implementata (`max_files_per_item`).
+- Esito: 21 item, 21 file (1/item), tutti 5.0-10.0s, 0 errori, 5.33 MB, 80.6s.
+- Durate verificate sui metadati pianificati prima del download: tutte in range,
+  nessun file senza `length`.
+- Modalita' di selezione per-item validata end-to-end.

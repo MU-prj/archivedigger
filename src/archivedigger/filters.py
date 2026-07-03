@@ -71,6 +71,21 @@ class Md5DedupFilter:
         return kept
 
 
+class MaxFilesPerItemFilter:
+    """Tiene al massimo N file per item (i primi N dopo gli altri filtri).
+
+    Stateless per chiamata: `plan()` invoca `apply` una volta per item, quindi
+    il cap vale per singolo item, non cumulativo sull'intero batch. Con N=1 si
+    scarica un solo file per item (modalita' campionamento).
+    """
+
+    def __init__(self, limit: int):
+        self.limit = limit
+
+    def apply(self, files: list[IAFile]) -> list[IAFile]:
+        return files[: self.limit] if self.limit is not None else files
+
+
 class FilterChain:
     def __init__(self, filters: list[FileFilter]):
         self.filters = list(filters)
@@ -90,4 +105,6 @@ def build_file_filter(config: FiltersConfig, seen_md5: set[str] | None = None) -
         chain.append(FileSizeFilter(config.min_file_size, config.max_file_size))
     if config.dedup:
         chain.append(Md5DedupFilter(seen_md5))
+    if config.max_files_per_item is not None:
+        chain.append(MaxFilesPerItemFilter(config.max_files_per_item))
     return FilterChain(chain)
