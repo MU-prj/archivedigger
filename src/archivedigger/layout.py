@@ -68,6 +68,9 @@ _LAYOUTS: dict[str, type[DiskLayout]] = {
     "flat": FlatLayout,
 }
 
+# Nomi validi per config/CLI: il registry e' l'unica fonte di verita'.
+LAYOUT_NAMES = tuple(sorted(_LAYOUTS))
+
 
 def build_layout(download: DownloadConfig) -> DiskLayout:
     name = download.layout

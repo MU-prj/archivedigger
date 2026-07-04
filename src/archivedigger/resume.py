@@ -58,6 +58,9 @@ _POLICIES: dict[str, type[ResumePolicy]] = {
     "force": ForceRedownload,
 }
 
+# Nomi validi per config/CLI: il registry e' l'unica fonte di verita'.
+RESUME_MODES = tuple(sorted(_POLICIES))
+
 
 def build_resume_policy(download: DownloadConfig) -> ResumePolicy:
     name = download.resume
