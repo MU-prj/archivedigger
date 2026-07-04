@@ -172,7 +172,9 @@ def _merge_layer(base: dict[str, Any], overlay: dict[str, Any]) -> None:
     # sceglie esplicitamente uno azzera l'altro ereditato dai livelli sotto,
     # altrimenti '--formats "VBR MP3"' su un profilo con prefer verrebbe
     # ignorato in silenzio (prefer ha la precedenza nella strategy).
-    files = overlay.get("files") or {}
+    files = overlay.get("files")
+    if not isinstance(files, dict):  # sezione malformata: lo dira' from_dict
+        return
     if files.get("formats") and not files.get("prefer"):
         base["files"]["prefer"] = []
     elif files.get("prefer") and not files.get("formats"):

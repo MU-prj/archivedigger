@@ -62,6 +62,16 @@ def build_format_strategy(files: FilesConfig) -> FormatStrategy:
     return ExactFormatStrategy(files.formats)
 
 
+SOURCE_MODES = ("any", "original", "derivative")
+
+
+def _glob_match(name: str, pattern: str) -> bool:
+    # match deterministico e case-insensitive: le estensioni su IA arrivano
+    # in ogni combinazione di maiuscole ('Track01.FLAC' deve matchare
+    # '*.flac'), e fnmatch.fnmatch cambierebbe semantica per piattaforma
+    return fnmatchcase(name.lower(), pattern.lower())
+
+
 class FileSelection:
     """Selezione completa dei file di un item a partire dalla FilesConfig.
 
@@ -72,6 +82,11 @@ class FileSelection:
     """
 
     def __init__(self, files: FilesConfig):
+        if files.source not in SOURCE_MODES:
+            available = ", ".join(SOURCE_MODES)
+            raise ValueError(
+                f"Source sconosciuto: {files.source!r}. Disponibili: {available}"
+            )
         self.source = files.source
         self.glob = files.glob
         self.exclude_glob = files.exclude_glob
@@ -82,15 +97,11 @@ class FileSelection:
         return self.format_strategy.select(admitted)
 
     def _admits(self, f: IAFile) -> bool:
-        if (
-            self.source not in (None, "any")
-            and f.source is not None
-            and f.source != self.source
-        ):
+        if self.source != "any" and f.source is not None and f.source != self.source:
             return False
-        if self.glob and not fnmatchcase(f.name, self.glob):
+        if self.glob and not _glob_match(f.name, self.glob):
             return False
-        return not (self.exclude_glob and fnmatchcase(f.name, self.exclude_glob))
+        return not (self.exclude_glob and _glob_match(f.name, self.exclude_glob))
 
 
 def build_file_selection(files: FilesConfig) -> FileSelection:

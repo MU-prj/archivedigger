@@ -75,6 +75,12 @@ def test_scalar_coercion_covers_all_string_list_fields():
     assert cfg.files.formats == ["Flac"]
 
 
+def test_non_dict_section_raises_config_error():
+    # 'files: [Flac]' deve dare l'errore di config, non un AttributeError
+    with pytest.raises(ValueError, match="Flac"):
+        Config.build(job={"files": ["Flac"]})
+
+
 def test_flat_prefer_groups_are_nested():
     # prefer: [Flac, VBR MP3] scritto piatto = un gruppo per formato
     cfg = Config.build(job={"files": {"prefer": ["Flac", "VBR MP3"]}})

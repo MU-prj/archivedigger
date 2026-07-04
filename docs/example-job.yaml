@@ -31,7 +31,7 @@ files:
     - [Flac, AIFF, WAVE]
     - [VBR MP3]
   # formats: [Flac]             # alternativa: solo questi formati esatti
-  glob: null                    # es. "*.flac"
+  glob: null                    # es. "*.flac" (match case-insensitive sul nome)
   exclude_glob: null
   source: original              # any | original | derivative (default: any)
 
