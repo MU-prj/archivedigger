@@ -8,6 +8,7 @@ quindi nessuna restrizione (coerente con "nessun filtro = tutto").
 
 from __future__ import annotations
 
+import re
 from typing import Protocol
 
 from .config import SearchConfig
@@ -19,10 +20,27 @@ class SearchFilter(Protocol):
         ...
 
 
+# Caratteri che Lucene interpreta come sintassi: se il valore ne contiene,
+# va racchiuso in una phrase query. Il '-' interno a una parola e' innocuo
+# (field-recordings), ma in testa al valore e' l'operatore NOT.
+_LUCENE_UNSAFE = re.compile(r'[\s+!(){}\[\]^"~*?:\\/&|=]|^-')
+
+
 def _quote(value: str) -> str:
-    """Racchiude tra virgolette i valori con spazi (richiesto da Lucene)."""
+    """Protegge un valore utente dalla sintassi Lucene.
+
+    Valori semplici passano intatti; spazi o metacaratteri (/, :, ", parentesi,
+    wildcard...) fanno scattare la phrase query, con escape di backslash e
+    virgolette interne. Non escapati, questi valori producono query malformate
+    o — peggio — 0 risultati silenziosi dall'API scrape di IA (stessa classe
+    del bug degli slash nei preset licenza, 2026-07-03). Chi vuole usare la
+    sintassi Lucene di proposito ha la via di fuga `query:`.
+    """
     text = str(value)
-    return f'"{text}"' if " " in text else text
+    if not _LUCENE_UNSAFE.search(text):
+        return text
+    escaped = text.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
 
 
 def _or_group(field: str, values: list[str]) -> list[str]:
@@ -105,7 +123,7 @@ class LicenseFilter:
 
     def clauses(self, search: SearchConfig) -> list[str]:
         if search.license_url is not None:
-            return [f'licenseurl:"{search.license_url}"']
+            return _term("licenseurl", search.license_url)
         preset = search.license
         if preset not in _LICENSE_PRESETS:
             available = ", ".join(sorted(_LICENSE_PRESETS))
