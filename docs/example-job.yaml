@@ -31,9 +31,9 @@ files:
     - [Flac, AIFF, WAVE]
     - [VBR MP3]
   # formats: [Flac]             # alternativa: solo questi formati esatti
-  glob: null                    # es. "*.flac"
+  glob: null                    # es. "*.flac" (match case-insensitive sul nome)
   exclude_glob: null
-  source: original              # original | derivative
+  source: original              # any | original | derivative (default: any)
 
 filters:
   # Filtri file-level client-side (strategy componibili).

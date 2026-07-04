@@ -46,6 +46,83 @@ def test_max_items_zero_means_unlimited():
     assert ids == ["0", "1", "2", "3", "4"]
 
 
+def test_lazy_resolves_real_library_when_not_injected(monkeypatch):
+    # senza funzioni iniettate, il client risolve i simboli della libreria vera
+    import sys
+    import types
+
+    fake_ia = types.ModuleType("internetarchive")
+    fake_ia.search_items = lambda *a, **k: iter([])
+    fake_ia.get_item = lambda ident: FakeItem(ident, {}, [])
+    monkeypatch.setitem(sys.modules, "internetarchive", fake_ia)
+
+    client = InternetArchiveClient()  # nessuna iniezione
+    assert client._search_items() is fake_ia.search_items
+    assert client._get_item() is fake_ia.get_item
+
+
+def test_search_error_row_raises_with_real_message():
+    # su errore l'API scrape emette una riga {'error': ...} prima di fermarsi
+    import pytest
+
+    def fake_search(query, fields=None, sorts=None, params=None):
+        return [{"error": "invalid query"}]
+
+    client = InternetArchiveClient(search_fn=fake_search)
+    with pytest.raises(ValueError, match="invalid query"):
+        list(client.search("q"))
+
+
+class _FakeIAModule:
+    """Mima il modulo internetarchive per testare download_file offline."""
+
+    def __init__(self, payload: dict[str, bytes]):
+        self._payload = payload  # nome IA -> contenuto; vuoto = download a vuoto
+        self.calls: list[dict] = []
+
+    def download(self, identifier, files=None, destdir=None, **kwargs):
+        from pathlib import Path
+
+        self.calls.append({"identifier": identifier, "files": files, **kwargs})
+        for name in files:
+            if name in self._payload:
+                target = Path(destdir) / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(self._payload[name])
+        return []
+
+
+def _download(monkeypatch, fake, item, file, local_path):
+    import sys
+
+    from archivedigger.models import IAFile, IAItem
+
+    monkeypatch.setitem(sys.modules, "internetarchive", fake)
+    client = InternetArchiveClient()
+    client.download_file(
+        IAItem(identifier=item, metadata={}, files=[]),
+        IAFile(name=file),
+        local_path,
+    )
+
+
+def test_download_file_lands_on_layout_path(tmp_path, monkeypatch):
+    fake = _FakeIAModule({"disc1/a.flac": b"audio"})
+    dest = tmp_path / "show1__disc1__a.flac"
+    _download(monkeypatch, fake, "show1", "disc1/a.flac", dest)
+    assert dest.read_bytes() == b"audio"
+    # niente residui di staging in destdir
+    assert [p.name for p in tmp_path.iterdir()] == ["show1__disc1__a.flac"]
+
+
+def test_download_file_raises_when_nothing_lands(tmp_path, monkeypatch):
+    import pytest
+
+    fake = _FakeIAModule({})  # la libreria "salta" senza scaricare ne' alzare
+    with pytest.raises(FileNotFoundError, match="show1"):
+        _download(monkeypatch, fake, "show1", "a.flac", tmp_path / "show1__a.flac")
+
+
 def test_get_item_translates_metadata_and_files():
     def fake_get_item(identifier):
         return FakeItem(

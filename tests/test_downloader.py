@@ -104,7 +104,7 @@ class ExplodingClient(FakeClient):
 
 def test_error_is_isolated_when_ignore_errors(tmp_path):
     client = ExplodingClient([_item()])
-    report = Downloader(client, _config(tmp_path, ignore_errors=True, retries=1)).run()
+    report = Downloader(client, _config(tmp_path, ignore_errors=True, retries=0)).run()
     assert report.errors == 1
     assert report.downloaded == 0
     assert report.records[0].status == "error"
@@ -115,9 +115,125 @@ def test_error_propagates_when_not_ignoring(tmp_path):
     import pytest
 
     client = ExplodingClient([_item()])
-    cfg = _config(tmp_path, ignore_errors=False, retries=1)
+    cfg = _config(tmp_path, ignore_errors=False, retries=0)
     with pytest.raises(OSError, match="network down"):
         Downloader(client, cfg).run()
+
+
+class CountingExplodingClient(FakeClient):
+    def __init__(self, items):
+        super().__init__(items)
+        self.attempts = 0
+
+    def download_file(self, item, file, local_path):
+        self.attempts += 1
+        raise OSError("network down")
+
+
+def test_retries_means_additional_attempts(tmp_path, monkeypatch):
+    import time as _time
+
+    monkeypatch.setattr(_time, "sleep", lambda s: None)
+    client = CountingExplodingClient([_item()])
+    Downloader(client, _config(tmp_path, ignore_errors=True, retries=2)).run()
+    assert client.attempts == 3  # 1 tentativo + 2 retry
+
+
+def test_retries_zero_means_single_attempt(tmp_path):
+    client = CountingExplodingClient([_item()])
+    Downloader(client, _config(tmp_path, ignore_errors=True, retries=0)).run()
+    assert client.attempts == 1
+
+
+class BrokenItemClient(FakeClient):
+    """get_item fallisce per un identifier specifico (item oscurato, 503...)."""
+
+    def __init__(self, items, broken: str):
+        super().__init__(items)
+        self._broken = broken
+        self._items[broken] = None  # compare nella ricerca ma non e' leggibile
+
+    def get_item(self, identifier):
+        if identifier == self._broken:
+            raise ConnectionError("metadata fetch failed")
+        return super().get_item(identifier)
+
+
+def test_broken_item_does_not_kill_batch_when_ignoring_errors(tmp_path):
+    client = BrokenItemClient([_item("ok1"), _item("ok2")], broken="dark1")
+    report = Downloader(client, _config(tmp_path, ignore_errors=True)).run()
+    assert report.downloaded == 2
+    assert report.errors == 1
+    broken = [r for r in report.records if r.status == "error"]
+    assert broken[0].identifier == "dark1"
+    assert "metadata fetch failed" in broken[0].error
+
+
+def test_broken_item_propagates_when_not_ignoring(tmp_path):
+    import pytest
+
+    client = BrokenItemClient([_item("ok1")], broken="dark1")
+    cfg = _config(tmp_path, ignore_errors=False)
+    with pytest.raises(ConnectionError):
+        Downloader(client, cfg).run()
+
+
+def test_plan_error_is_written_to_manifest(tmp_path):
+    from archivedigger.manifest import Manifest
+
+    manifest = Manifest(tmp_path / "manifest.jsonl")
+    client = BrokenItemClient([_item("ok1")], broken="dark1")
+    Downloader(client, _config(tmp_path, ignore_errors=True), manifest=manifest).run()
+    records = Manifest(tmp_path / "manifest.jsonl").records()
+    errors = [r for r in records if r.status == "error"]
+    assert [r.identifier for r in errors] == ["dark1"]
+
+
+def test_budget_not_reached_keeps_whole_plan(tmp_path):
+    # budget impostato ma mai raggiunto: il loop completa senza tagliare
+    files = [IAFile(name=f"{i}.flac", format="Flac", size=1) for i in range(3)]
+    items = [_item(identifier=f"i{i}", files=[f]) for i, f in enumerate(files)]
+    cfg = Config.build(job={"download": {"destdir": str(tmp_path), "size_budget_gb": 100}})
+    report = Downloader(FakeClient(items), cfg).run()
+    assert report.downloaded == 3
+
+
+def test_dedup_keeps_files_without_md5(tmp_path):
+    # un file senza md5 non puo' essere dedotto: passa sempre, non entra nel set
+    files = [
+        IAFile(name="a.flac", format="Flac", size=1, md5=None),
+        IAFile(name="b.flac", format="Flac", size=1, md5=None),
+    ]
+    cfg = Config.build(
+        job={"download": {"destdir": str(tmp_path), "layout": "item"}, "filters": {"dedup": True}}
+    )
+    client = FakeClient([_item(files=files)])
+    Downloader(client, cfg).run()
+    assert sorted(client.downloaded) == ["a.flac", "b.flac"]
+
+
+def test_estimate_then_run_on_same_downloader_with_dedup(tmp_path):
+    # Md5DedupFilter e' stateful: estimate() non deve avvelenare il run()
+    files = [IAFile(name="a.flac", format="Flac", size=10, md5="m1")]
+    cfg = Config.build(
+        job={"download": {"destdir": str(tmp_path)}, "filters": {"dedup": True}}
+    )
+    d = Downloader(FakeClient([_item(files=files)]), cfg)
+    est = d.estimate()
+    assert est.files == 1
+    report = d.run()
+    assert report.downloaded == 1
+
+
+def test_failing_should_skip_is_recorded_as_error(tmp_path):
+    # il percorso atteso esiste ma e' una directory: l'hash MD5 fallirebbe;
+    # l'errore va nel manifest senza uccidere il batch
+    (tmp_path / "show1__a.flac").mkdir()
+    files = [IAFile(name="a.flac", format="Flac", size=None, md5="deadbeef")]
+    client = FakeClient([_item(files=files)])
+    report = Downloader(client, _config(tmp_path, resume="checksum")).run()
+    assert report.errors == 1
+    assert report.records[0].status == "error"
 
 
 def test_size_budget_stops_download(tmp_path):

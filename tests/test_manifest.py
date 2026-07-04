@@ -49,6 +49,29 @@ def test_records_missing_file_is_empty(tmp_path):
     assert Manifest(tmp_path / "nope.jsonl").records() == []
 
 
+def test_blank_lines_are_skipped(tmp_path):
+    path = tmp_path / "m.jsonl"
+    m = Manifest(path)
+    m.append(_rec("i1", "a"))
+    with path.open("a", encoding="utf-8") as fh:
+        fh.write("\n   \n")  # righe vuote in mezzo
+    m.append(_rec("i2", "b"))
+    assert [r.identifier for r in Manifest(path).records()] == ["i1", "i2"]
+
+
+def test_torn_trailing_line_is_skipped(tmp_path):
+    # crash a meta' append: l'ultima riga resta troncata; il run successivo
+    # deve ripartire, non crashare in loop su JSONDecodeError
+    path = tmp_path / "m.jsonl"
+    m = Manifest(path)
+    m.append(_rec("i1", "a", md5="x"))
+    with path.open("a", encoding="utf-8") as fh:
+        fh.write('{"identifier": "torn", "fi')
+    records = Manifest(path).records()
+    assert [r.identifier for r in records] == ["i1"]
+    assert Manifest(path).seen_md5() == {"x"}
+
+
 def test_export_csv_writes_header_and_rows(tmp_path):
     jsonl = tmp_path / "m.jsonl"
     m = Manifest(jsonl)

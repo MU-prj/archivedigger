@@ -51,6 +51,18 @@ def test_estimate_reports_items_files_and_bytes(tmp_path):
     assert est.bytes == 1 + 600 + 400  # _item() ha un file da 1 byte
 
 
+def test_estimate_counts_files_with_unknown_size(tmp_path):
+    files = [
+        IAFile(name="a.flac", format="Flac", size=600),
+        IAFile(name="b.flac", format="Flac", size=None),  # metadati sporchi
+    ]
+    cfg = Config.build(job={"download": {"destdir": str(tmp_path)}})
+    est = api.estimate(cfg, client=FakeClient([IAItem("i1", {}, files)]))
+    assert est.files == 2
+    assert est.bytes == 600
+    assert est.files_unknown_size == 1
+
+
 def test_estimate_respects_budget(tmp_path):
     files = [IAFile(name=f"{i}.flac", format="Flac", size=1024**3) for i in range(5)]
     items = [IAItem(f"i{i}", {"collection": "x"}, [f]) for i, f in enumerate(files)]
@@ -75,3 +87,52 @@ def test_dig_writes_manifest_when_configured(tmp_path):
     )
     api.dig(cfg, client=FakeClient([_item()]))
     assert len(Manifest(manifest_path).records()) == 1
+
+
+def test_dig_writes_default_manifest_in_destdir(tmp_path):
+    # il manifest e' promesso come comportamento di base: senza --manifest
+    # deve comunque nascere in <destdir>/manifest.jsonl
+    from archivedigger.manifest import Manifest
+
+    cfg = Config.build(job={"download": {"destdir": str(tmp_path)}})
+    api.dig(cfg, client=FakeClient([_item()]))
+    records = Manifest(tmp_path / "manifest.jsonl").records()
+    assert [r.status for r in records] == ["downloaded"]
+
+
+def test_dry_run_leaves_no_default_manifest(tmp_path):
+    cfg = Config.build(job={"download": {"destdir": str(tmp_path), "dry_run": True}})
+    api.dig(cfg, client=FakeClient([_item()]))
+    assert not (tmp_path / "manifest.jsonl").exists()
+
+
+def test_dry_run_reads_manifest_for_dedup_parity(tmp_path):
+    # l'anteprima deve dedup-are come la run reale: il manifest va letto
+    # (senza scriverci) anche in dry-run
+    from archivedigger.manifest import Manifest, ManifestRecord
+
+    Manifest(tmp_path / "manifest.jsonl").append(
+        ManifestRecord(identifier="old", file="a.flac", md5="m1", status="downloaded")
+    )
+    files = [IAFile(name="a.flac", format="Flac", size=10, md5="m1")]
+    cfg = Config.build(
+        job={
+            "download": {"destdir": str(tmp_path), "dry_run": True},
+            "filters": {"dedup": True},
+        }
+    )
+    report = api.dig(cfg, client=FakeClient([IAItem("i1", {}, files)]))
+    assert report.records == []  # gia' visto: la run reale lo salterebbe
+    # e il manifest non e' stato toccato dall'anteprima
+    assert len(Manifest(tmp_path / "manifest.jsonl").records()) == 1
+
+
+def test_estimate_surfaces_plan_errors(tmp_path):
+    class BrokenClient(FakeClient):
+        def get_item(self, identifier):
+            raise ConnectionError("503")
+
+    cfg = Config.build(job={"download": {"destdir": str(tmp_path)}})
+    est = api.estimate(cfg, client=BrokenClient([_item()]))
+    assert est.files == 0
+    assert est.errors == 1  # non 'la query non matcha nulla'

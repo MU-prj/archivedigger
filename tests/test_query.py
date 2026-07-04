@@ -121,6 +121,28 @@ def test_item_size_parses_human_units_to_bytes():
     assert "item_size:[10485760 TO *]" in q
 
 
+def test_creator_with_slash_is_quoted():
+    # '/' apre una regex in Lucene: non protetto, l'API scrape torna 0 risultati
+    q = build_query(SearchConfig(creator="AC/DC"))
+    assert 'creator:"AC/DC"' in q
+
+
+def test_embedded_quotes_are_escaped():
+    q = build_query(SearchConfig(title='John "Q" Public'))
+    assert 'title:"John \\"Q\\" Public"' in q
+
+
+def test_injection_like_value_stays_one_clause():
+    # un valore ostile non deve poter riscrivere la struttura della query
+    q = build_query(SearchConfig(creator="x) OR mediatype:(texts"))
+    assert 'creator:"x) OR mediatype:(texts"' in q
+
+
+def test_hyphen_inside_word_is_not_quoted():
+    q = build_query(SearchConfig(collection=["field-recordings"]))
+    assert "collection:field-recordings" in q
+
+
 def test_raw_query_is_anded_in_parentheses():
     q = build_query(SearchConfig(query="format:Flac AND year:1971"))
     assert "(format:Flac AND year:1971)" in q

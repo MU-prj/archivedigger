@@ -57,8 +57,9 @@ class ItemLayout:
 
 class FlatLayout:
     def path_for(self, destdir: Path, item: IAItem, file: IAFile) -> Path:
-        parts = [_safe(p) for p in file.name.split("/") if p not in ("", ".", "..")]
-        flat = "__".join(parts) if parts else "_"
+        # stessa regola di split/sanitizzazione degli altri layout: la
+        # differenza e' solo l'appiattimento dei separatori in "__"
+        flat = "__".join(_rel_name(file.name).parts)
         return destdir / f"{_safe(item.identifier)}__{flat}"
 
 
@@ -67,6 +68,9 @@ _LAYOUTS: dict[str, type[DiskLayout]] = {
     "item": ItemLayout,
     "flat": FlatLayout,
 }
+
+# Nomi validi per config/CLI: il registry e' l'unica fonte di verita'.
+LAYOUT_NAMES = tuple(sorted(_LAYOUTS))
 
 
 def build_layout(download: DownloadConfig) -> DiskLayout:

@@ -17,8 +17,6 @@ from typing import Protocol
 from .config import DownloadConfig
 from .models import IAFile
 
-_CHUNK = 1 << 20
-
 
 class ResumePolicy(Protocol):
     def should_skip(self, local_path: Path, file: IAFile) -> bool:
@@ -39,17 +37,19 @@ class ChecksumResume:
     def should_skip(self, local_path: Path, file: IAFile) -> bool:
         if not local_path.exists():
             return False
+        # una dimensione diversa da quella attesa e' gia' la prova che il file
+        # e' incompleto (crash a meta' download): niente skip, e per i file
+        # integri si evita di ri-leggere l'intero contenuto solo per l'hash
+        if file.size is not None and local_path.stat().st_size != file.size:
+            return False
         if not file.md5:
-            return True  # niente MD5 atteso: ci si accontenta dell'esistenza
+            return True  # niente MD5 atteso: esistenza + dimensione bastano
         return _md5(local_path) == file.md5
 
 
 def _md5(path: Path) -> str:
-    h = hashlib.md5()
     with path.open("rb") as fh:
-        for chunk in iter(lambda: fh.read(_CHUNK), b""):
-            h.update(chunk)
-    return h.hexdigest()
+        return hashlib.file_digest(fh, "md5").hexdigest()
 
 
 _POLICIES: dict[str, type[ResumePolicy]] = {
@@ -57,6 +57,9 @@ _POLICIES: dict[str, type[ResumePolicy]] = {
     "fast-skip": FastSkipResume,
     "force": ForceRedownload,
 }
+
+# Nomi validi per config/CLI: il registry e' l'unica fonte di verita'.
+RESUME_MODES = tuple(sorted(_POLICIES))
 
 
 def build_resume_policy(download: DownloadConfig) -> ResumePolicy:

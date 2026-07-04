@@ -17,6 +17,8 @@ import yaml
 
 from .client import Client
 from .config import Config, list_profiles
+from .layout import LAYOUT_NAMES
+from .resume import RESUME_MODES
 
 # Mappa: nome attributo argparse -> (sezione, campo). Solo i campi non-None
 # finiscono negli override, cosi' cio' che l'utente non passa non azzera nulla.
@@ -111,7 +113,7 @@ def _add_common_flags(p: argparse.ArgumentParser) -> None:
     p.add_argument("--prefer")
     p.add_argument("--glob")
     p.add_argument("--exclude-glob", dest="exclude_glob")
-    p.add_argument("--source", choices=["original", "derivative"])
+    p.add_argument("--source", choices=["any", "original", "derivative"])
     # filtri file
     p.add_argument("--min-duration", dest="min_duration")
     p.add_argument("--max-duration", dest="max_duration")
@@ -119,14 +121,18 @@ def _add_common_flags(p: argparse.ArgumentParser) -> None:
     p.add_argument("--max-file-size", dest="max_file_size")
     p.add_argument("--max-files-per-item", dest="max_files_per_item", type=int)
     p.add_argument("--dedup", action="store_true", default=None)
+    p.add_argument("--no-dedup", dest="dedup", action="store_false", default=None)
     # download
     p.add_argument("--destdir")
-    p.add_argument("--layout", choices=["collection", "item", "flat"])
-    p.add_argument("--flat", action="store_true", default=None)
+    p.add_argument("--layout", choices=LAYOUT_NAMES)
+    # alias dichiarativi: condividono la dest della flag estesa, cosi' vince
+    # sempre l'ultima flag scritta (prima --layout item --flat vinceva --flat
+    # in silenzio, qualunque fosse l'ordine)
+    p.add_argument("--flat", dest="layout", action="store_const", const="flat")
     p.add_argument("--workers", type=int)
     p.add_argument("--retries", type=int)
-    p.add_argument("--resume", choices=["checksum", "fast-skip", "force"])
-    p.add_argument("--force", action="store_true", default=None)
+    p.add_argument("--resume", choices=RESUME_MODES)
+    p.add_argument("--force", dest="resume", action="store_const", const="force")
     p.add_argument("--ignore-errors", dest="ignore_errors", action="store_true", default=None)
     p.add_argument(
         "--no-ignore-errors", dest="ignore_errors", action="store_false", default=None
@@ -140,17 +146,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="archivedigger")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    run_p = sub.add_parser("run", help="Cerca e scarica secondo il job/flag")
-    run_p.add_argument("job", nargs="?", help="File YAML del job (opzionale)")
-    _add_common_flags(run_p)
-
-    search_p = sub.add_parser("search", help="Solo ricerca, stampa gli identifier")
-    search_p.add_argument("job", nargs="?")
-    _add_common_flags(search_p)
-
-    est_p = sub.add_parser("estimate", help="Dry-run: stima item/file/GB")
-    est_p.add_argument("job", nargs="?")
-    _add_common_flags(est_p)
+    for name, help_text in [
+        ("run", "Cerca e scarica secondo il job/flag"),
+        ("search", "Solo ricerca, stampa gli identifier"),
+        ("estimate", "Dry-run: stima item/file/GB"),
+    ]:
+        p = sub.add_parser(name, help=help_text)
+        p.add_argument("job", nargs="?", help="File YAML del job (opzionale)")
+        _add_common_flags(p)
 
     exp_p = sub.add_parser("export-manifest", help="Esporta un manifest JSONL in CSV")
     exp_p.add_argument("manifest_path")
@@ -180,16 +183,12 @@ def args_to_overrides(args: argparse.Namespace) -> dict[str, Any]:
 
     if data.get("prefer"):
         put("files", "prefer", parse_prefer(data["prefer"]))
-    if data.get("dedup"):
-        put("filters", "dedup", True)
+    if data.get("dedup") is not None:
+        put("filters", "dedup", data["dedup"])
     if data.get("dry_run"):
         put("download", "dry_run", True)
     if data.get("ignore_errors") is not None:
         put("download", "ignore_errors", data["ignore_errors"])
-    if data.get("force"):
-        put("download", "resume", "force")
-    if data.get("flat"):
-        put("download", "layout", "flat")
 
     return overrides
 
@@ -200,9 +199,11 @@ def config_from_args(args: argparse.Namespace) -> Config:
     job_path = getattr(args, "job", None)
     if job_path:
         job = yaml.safe_load(Path(job_path).read_text(encoding="utf-8")) or {}
-    profile = getattr(args, "profile", None)
-    if profile is None and isinstance(job, dict):
-        profile = job.pop("profile", None)
+    # il profile del job va SEMPRE tolto dal dict: se restasse insieme a
+    # --profile, Config si etichetterebbe col profilo del job pur avendo
+    # caricato quello della flag
+    job_profile = job.pop("profile", None) if isinstance(job, dict) else None
+    profile = getattr(args, "profile", None) or job_profile
     return Config.build(profile=profile, job=job, overrides=args_to_overrides(args))
 
 
@@ -236,7 +237,14 @@ def main(argv: list[str] | None = None, client: Client | None = None) -> int:
             f"item: {est.items}  file: {est.files}  "
             f"totale: {est.bytes} byte ({est.gigabytes:.2f} GB)"
         )
-        return 0
+        if est.files_unknown_size:
+            print(
+                f"attenzione: {est.files_unknown_size} file senza dimensione "
+                "nei metadati (contano 0 nel totale e sfuggono al budget)"
+            )
+        if est.errors:
+            print(f"attenzione: {est.errors} item non leggibili (esclusi dalla stima)")
+        return 0 if est.errors == 0 else 1
 
     report = api.dig(config, client=client)
     print(
@@ -244,4 +252,6 @@ def main(argv: list[str] | None = None, client: Client | None = None) -> int:
         f"saltati: {report.skipped}  errori: {report.errors}  "
         f"byte: {report.bytes_downloaded}"
     )
-    return 0
+    # ignore_errors governa la prosecuzione del batch, non l'esito: chi
+    # scripta (cron/CI) deve poter distinguere un run con errori
+    return 0 if report.errors == 0 else 1

@@ -10,6 +10,7 @@ non toccata.
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator
+from itertools import islice
 from pathlib import Path
 from typing import Protocol
 
@@ -55,10 +56,14 @@ class InternetArchiveClient:
     ) -> Iterator[str]:
         sorts = [sort] if sort else None
         results = self._search_items()(query, fields=["identifier"], sorts=sorts)
-        for i, row in enumerate(results):
-            if max_items and i >= max_items:
-                break
-            yield row["identifier"]
+        # max_items=0 o None = illimitato (comportamento asserito dai test)
+        for row in islice(iter(results), max_items or None):
+            identifier = row.get("identifier")
+            if identifier is None:
+                # su errore l'API scrape emette una riga {'error': ...}: farla
+                # esplodere come KeyError maschererebbe il messaggio vero
+                raise ValueError(f"Ricerca IA fallita: {row.get('error', row)!r}")
+            yield identifier
 
     def get_item(self, identifier: str) -> IAItem:
         raw = self._get_item()(identifier)
@@ -67,27 +72,48 @@ class InternetArchiveClient:
         return IAItem(identifier=identifier, metadata=metadata, files=files)
 
     def download_file(self, item: IAItem, file: IAFile, local_path: Path) -> None:
+        """Scarica un singolo file in una staging directory usa-e-getta.
+
+        Scaricare direttamente in destdir aveva tre difetti: (1) file di item
+        diversi con lo stesso basename atterravano sullo stesso percorso
+        provvisorio, corrompendosi a vicenda con workers > 1; (2) la libreria
+        salta in silenzio i file locali con dimensione/mtime combacianti,
+        vanificando resume=force e la riparazione dei corrotti; (3) un
+        download a vuoto (item oscurato, nome non piu' esistente) non alzava
+        errori e veniva registrato come scaricato. La staging directory vuota
+        e per-chiamata elimina (1) e (2); la verifica dell'atterraggio
+        elimina (3).
+        """
+        import os
         import shutil
+        import tempfile
 
         import internetarchive
 
         local_path.parent.mkdir(parents=True, exist_ok=True)
-        internetarchive.download(
-            item.identifier,
-            files=[file.name],
-            destdir=str(local_path.parent),
-            no_directory=True,
-            verbose=False,
-        )
-        # internetarchive scrive col nome IA (file.name) dentro destdir; il
-        # layout puo' voler un basename diverso (es. flat: identifier__file).
-        # Se differisce, sposto il file sul percorso scelto.
-        parts = [p for p in file.name.split("/") if p not in ("", ".", "..")]
-        landed = local_path.parent.joinpath(*parts) if parts else local_path
-        if landed != local_path and landed.exists():
-            shutil.move(str(landed), str(local_path))
-            # rimuove le sottocartelle rimaste vuote (nomi IA con sottopercorsi)
-            parent = landed.parent
-            while parent != local_path.parent and parent.is_dir() and not any(parent.iterdir()):
-                parent.rmdir()
-                parent = parent.parent
+        staging = tempfile.mkdtemp(prefix=".staging-", dir=local_path.parent)
+        try:
+            internetarchive.download(
+                item.identifier,
+                files=[file.name],
+                destdir=staging,
+                no_directory=True,
+                verbose=False,
+                # i retry con backoff sono del Downloader: qui il minimo
+                # possibile (la libreria coercisce 0 al default con
+                # 'retries = retries or 2', quindi 1 e' il pavimento)
+                retries=1,
+            )
+            landed = [p for p in Path(staging).rglob("*") if p.is_file()]
+            if not landed:
+                raise FileNotFoundError(
+                    f"{item.identifier}/{file.name}: la libreria non ha "
+                    "scaricato nulla (item oscurato o nome file inesistente?)"
+                )
+            # os.replace (stesso filesystem: staging vive in destdir) e' atomico
+            # e fallisce forte se local_path e' una directory — shutil.move
+            # sposterebbe il file DENTRO la directory, registrando un percorso
+            # sbagliato come 'downloaded'
+            os.replace(landed[0], local_path)
+        finally:
+            shutil.rmtree(staging, ignore_errors=True)

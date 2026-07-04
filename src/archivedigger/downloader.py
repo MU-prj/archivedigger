@@ -19,7 +19,7 @@ from pathlib import Path
 from .client import Client
 from .config import Config
 from .filters import build_file_filter
-from .formats import build_format_strategy
+from .formats import build_file_selection
 from .layout import build_layout
 from .manifest import Manifest, ManifestRecord
 from .models import IAFile, IAItem
@@ -38,6 +38,12 @@ class Estimate:
     items: int = 0
     files: int = 0
     bytes: int = 0
+    # file senza 'size' nei metadati IA: contano 0 in `bytes` e sfuggono al
+    # budget, quindi vanno almeno dichiarati invece di sparire nella stima
+    files_unknown_size: int = 0
+    # item il cui fetch dei metadati e' fallito durante plan(): la stima deve
+    # dichiararli come farebbe run(), non fingere che la query non matchi nulla
+    errors: int = 0
 
     @property
     def gigabytes(self) -> float:
@@ -58,29 +64,49 @@ class Downloader:
     def __init__(self, client: Client, config: Config, manifest: Manifest | None = None):
         self.client = client
         self.config = config
-        self.format_strategy = build_format_strategy(config.files)
+        self.file_selection = build_file_selection(config.files)
         self.layout = build_layout(config.download)
         self.resume = build_resume_policy(config.download)
-        seen = manifest.seen_md5() if manifest else None
-        self.file_filter = build_file_filter(config.filters, seen)
+        # Il set di MD5 dal manifest serve solo al dedup: senza dedup attivo
+        # evitiamo di leggere (e ri-parsare) l'intero JSONL a ogni run.
+        self._seen_md5 = (
+            manifest.seen_md5() if manifest and config.filters.dedup else None
+        )
         self.manifest = manifest
+        self.plan_errors: list[tuple[str, Exception]] = []
         self._lock = threading.Lock()
 
     def plan(self) -> list[PlannedFile]:
-        """Ricerca + selezione file, senza scaricare (usato anche dal dry-run)."""
+        """Ricerca + selezione file, senza scaricare (usato anche dal dry-run).
+
+        Un item guasto (metadati illeggibili, 503 sul fetch, item oscurato) non
+        deve uccidere il batch: con ignore_errors finisce in `plan_errors` e
+        si prosegue, coerente con il contratto di `_process` sul download.
+        """
         from .query import build_query
 
         query = build_query(self.config.search)
         destdir = Path(self.config.download.destdir)
+        # Catena costruita a ogni plan(): Md5DedupFilter e' stateful e riusare
+        # la stessa istanza tra estimate() e run() farebbe vedere alla seconda
+        # chiamata tutti gli MD5 come gia' visti (zero file processati).
+        file_filter = build_file_filter(self.config.filters, self._seen_md5)
+        self.plan_errors = []
         planned: list[PlannedFile] = []
         for identifier in self.client.search(
             query,
             sort=self.config.search.sort,
             max_items=self.config.search.max_items,
         ):
-            item = self.client.get_item(identifier)
-            selected = self.format_strategy.select(item.files)
-            selected = self.file_filter.apply(selected)
+            try:
+                item = self.client.get_item(identifier)
+            except Exception as exc:  # noqa: BLE001 - stesso contratto di _process
+                if not self.config.download.ignore_errors:
+                    raise
+                self.plan_errors.append((identifier, exc))
+                continue
+            selected = self.file_selection.select(item.files)
+            selected = file_filter.apply(selected)
             for f in selected:
                 planned.append(PlannedFile(item, f, self.layout.path_for(destdir, item, f)))
         return planned
@@ -95,12 +121,23 @@ class Downloader:
             items=len({p.item.identifier for p in planned}),
             files=len(planned),
             bytes=sum(p.file.size or 0 for p in planned),
+            files_unknown_size=sum(1 for p in planned if p.file.size is None),
+            errors=len(self.plan_errors),
         )
 
     def run(self) -> DownloadReport:
         report = DownloadReport()
         planned = self._apply_budget(self.plan())
         report.items = len({p.item.identifier for p in planned})
+
+        for identifier, exc in self.plan_errors:
+            record = ManifestRecord(
+                identifier=identifier, file="", status="error", error=str(exc)
+            )
+            report.errors += 1
+            report.records.append(record)
+            if self.manifest is not None:
+                self.manifest.append(record)
 
         workers = max(1, self.config.download.workers)
         if workers == 1 or self.config.download.dry_run:
@@ -132,13 +169,15 @@ class Downloader:
             self._record(report, item, file, path, "dry-run")
             return
 
-        if self.resume.should_skip(path, file):
-            with self._lock:
-                report.skipped += 1
-            self._record(report, item, file, path, "skipped")
-            return
-
         try:
+            # anche should_skip puo' fallire (path che e' una directory, file
+            # illeggibile durante l'hash): va trattato come errore del file,
+            # non come crash del batch.
+            if self.resume.should_skip(path, file):
+                with self._lock:
+                    report.skipped += 1
+                self._record(report, item, file, path, "skipped")
+                return
             self._download_with_retry(item, file, path)
         except Exception as exc:  # noqa: BLE001 - l'errore va nel manifest, non ferma il batch
             with self._lock:
@@ -154,15 +193,18 @@ class Downloader:
         self._record(report, item, file, path, "downloaded")
 
     def _download_with_retry(self, item: IAItem, file: IAFile, path: Path) -> None:
-        attempts = max(1, self.config.download.retries)
-        for attempt in range(attempts):
+        # retries = tentativi AGGIUNTIVI dopo il primo (retries: 3 -> 4 tentativi);
+        # prima valeva come totale, quindi retries: 1 non ritentava affatto.
+        # I ritentativi girano nel loop; l'ultimo tentativo e' fuori, cosi' il
+        # suo errore propaga senza un ramo di uscita irraggiungibile.
+        retries = max(0, self.config.download.retries)
+        for attempt in range(retries):
             try:
                 self.client.download_file(item, file, path)
                 return
             except Exception:
-                if attempt + 1 >= attempts:
-                    raise
                 time.sleep(min(2**attempt, 30))
+        self.client.download_file(item, file, path)
 
     def _record(self, report, item, file, path, status, error=None) -> None:
         record = ManifestRecord(
@@ -179,7 +221,9 @@ class Downloader:
         )
         with self._lock:
             report.records.append(record)
-            if self.manifest is not None:
+            # il dry-run legge il manifest (dedup) ma non deve scriverlo:
+            # nessuna traccia su disco da un'anteprima
+            if self.manifest is not None and status != "dry-run":
                 self.manifest.append(record)
 
     def _budget_bytes(self) -> int | None:

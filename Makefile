@@ -5,7 +5,7 @@ else
 PY := $(VENV)/bin/python
 endif
 
-.PHONY: venv install test test-all test-integration lint format clean
+.PHONY: venv install test test-all test-integration coverage lint format clean
 
 venv:            ## Crea il virtualenv (.venv)
 	python -m venv $(VENV)
@@ -22,6 +22,10 @@ test-integration: ## Esegue SOLO i test che toccano Internet Archive reale
 
 test-all:        ## Esegue tutta la suite, integration inclusi
 	$(PY) -m pytest -m ""
+
+coverage:        ## Esegue i test con il gate di copertura (100% righe+branch)
+	$(PY) -m coverage run -m pytest
+	$(PY) -m coverage report
 
 lint:            ## Controlli statici ruff
 	$(PY) -m ruff check src tests

@@ -23,7 +23,8 @@ Pensato per essere usato **come dipendenza esterna in altri repository**
   dimensione min/max, dedup MD5.
 - **Bulk robusto**: 4 worker di default, retry con backoff, ripresa idempotente
   (checksum MD5 o esistenza file), budget di dimensione totale, manifest JSONL
-  con export CSV.
+  (di default `<destdir>/manifest.jsonl`) con export CSV. Un item guasto non
+  ferma il batch; exit code 1 se il run registra errori.
 
 ## Stato
 

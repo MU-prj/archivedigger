@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import csv
 import json
+from collections.abc import Iterator
 from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 from typing import Any
@@ -30,8 +31,10 @@ class ManifestRecord:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ManifestRecord:
-        known = {f.name for f in fields(cls)}
-        return cls(**{k: v for k, v in data.items() if k in known})
+        return cls(**{k: v for k, v in data.items() if k in _KNOWN_FIELDS})
+
+
+_KNOWN_FIELDS = frozenset(f.name for f in fields(ManifestRecord))
 
 
 class Manifest:
@@ -45,35 +48,53 @@ class Manifest:
         with self.path.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(asdict(record), ensure_ascii=False) + "\n")
 
-    def records(self) -> list[ManifestRecord]:
+    def iter_records(self) -> Iterator[ManifestRecord]:
+        """Scorre i record in streaming, senza caricare tutto in memoria.
+
+        Una riga malformata (tipicamente l'ultima, troncata da un crash a
+        meta' append) viene saltata: il manifest promette di sopravvivere ai
+        crash, non puo' essere lui stesso il motivo per cui il run successivo
+        non parte piu'.
+        """
         if not self.path.exists():
-            return []
-        out: list[ManifestRecord] = []
+            return
         with self.path.open(encoding="utf-8") as fh:
             for line in fh:
                 line = line.strip()
-                if line:
-                    out.append(ManifestRecord.from_dict(json.loads(line)))
-        return out
+                if not line:
+                    continue
+                try:
+                    data = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                yield ManifestRecord.from_dict(data)
+
+    def records(self) -> list[ManifestRecord]:
+        return list(self.iter_records())
 
     def seen_md5(self) -> set[str]:
         """MD5 gia' registrati come scaricati (per seminare il dedup)."""
         return {
             r.md5
-            for r in self.records()
+            for r in self.iter_records()
             if r.md5 and r.status == "downloaded"
         }
 
 
 def export_csv(jsonl_path: str | Path, csv_path: str | Path) -> int:
-    """Esporta un manifest JSONL in CSV; ritorna il numero di righe scritte."""
-    records = Manifest(jsonl_path).records()
+    """Esporta un manifest JSONL in CSV; ritorna il numero di righe scritte.
+
+    Streaming riga-per-riga: un manifest da milioni di record non deve stare
+    tutto in memoria per una trasformazione lineare.
+    """
     columns = [f.name for f in fields(ManifestRecord)]
     out = Path(csv_path)
     out.parent.mkdir(parents=True, exist_ok=True)
+    written = 0
     with out.open("w", encoding="utf-8", newline="") as fh:
         writer = csv.DictWriter(fh, fieldnames=columns)
         writer.writeheader()
-        for r in records:
+        for r in Manifest(jsonl_path).iter_records():
             writer.writerow(asdict(r))
-    return len(records)
+            written += 1
+    return written

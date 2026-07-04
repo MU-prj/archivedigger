@@ -47,6 +47,13 @@ def test_prefer_flag_is_parsed_into_groups():
     assert ov["files"]["prefer"] == [["Flac", "AIFF", "WAVE"], ["VBR MP3"]]
 
 
+def test_prefer_skips_empty_groups():
+    from archivedigger.cli import parse_prefer
+
+    # separatori spuri (gruppi vuoti) vengono ignorati, non producono [[]]
+    assert parse_prefer("Flac>>VBR MP3>") == [["Flac"], ["VBR MP3"]]
+
+
 def test_boolean_flags():
     ov = _overrides(["--dry-run", "--dedup"])
     assert ov["download"]["dry_run"] is True
@@ -62,6 +69,19 @@ def test_flat_and_force_map_to_layout_and_resume():
 def test_no_ignore_errors_flag():
     ov = _overrides(["--no-ignore-errors"])
     assert ov["download"]["ignore_errors"] is False
+
+
+def test_no_dedup_flag_can_turn_off_profile_dedup():
+    # i profili corpus/dataset accendono dedup: la CLI deve poterlo spegnere
+    ov = _overrides(["--no-dedup"])
+    assert ov["filters"]["dedup"] is False
+
+
+def test_alias_and_extended_flag_last_one_wins():
+    # --flat e --layout condividono la dest: vince l'ultima flag scritta
+    assert _overrides(["--flat", "--layout", "item"])["download"]["layout"] == "item"
+    assert _overrides(["--layout", "item", "--flat"])["download"]["layout"] == "flat"
+    assert _overrides(["--force", "--resume", "checksum"])["download"]["resume"] == "checksum"
 
 
 def test_unset_flags_do_not_appear():
@@ -82,11 +102,31 @@ def test_profile_flag_selects_preset():
     assert cfg.search.max_items == 1000  # dataset.yaml
 
 
+def test_profile_flag_beats_job_profile_and_labels_config(tmp_path):
+    # il profile del job non deve sopravvivere come etichetta quando la
+    # flag --profile carica un preset diverso
+    job = tmp_path / "job.yaml"
+    job.write_text("profile: corpus\n", encoding="utf-8")
+    cfg = config_from_args(parse_args(["run", str(job), "--profile", "dataset"]))
+    assert cfg.profile == "dataset"
+    assert cfg.search.max_items == 1000  # dataset.yaml, non corpus
+
+
 def test_main_run_downloads_with_injected_client(tmp_path):
     client = FakeClient([_item()])
     code = main(["run", "--destdir", str(tmp_path)], client=client)
     assert code == 0
     assert client.downloaded == ["a.flac"]
+
+
+def test_main_run_with_errors_exits_nonzero(tmp_path):
+    class ExplodingClient(FakeClient):
+        def download_file(self, item, file, local_path):
+            raise OSError("network down")
+
+    client = ExplodingClient([_item()])
+    code = main(["run", "--destdir", str(tmp_path), "--retries", "0"], client=client)
+    assert code == 1  # cron/CI devono vedere il fallimento
 
 
 def test_main_search_lists_identifiers(capsys):

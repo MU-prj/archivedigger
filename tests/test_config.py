@@ -51,6 +51,79 @@ def test_unknown_field_in_section_raises():
         Config.build(job={"download": {"workerz": 8}})
 
 
+def test_unknown_top_level_section_raises():
+    # il typo "filter:" non deve far sparire silenziosamente tutti i filtri
+    with pytest.raises(ValueError, match="filter"):
+        Config.build(job={"filter": {"min_duration": 5}})
+
+
+def test_scalar_string_coerced_to_list_field():
+    # in YAML e' naturale scrivere collection: librivoxaudio (scalare)
+    cfg = Config.build(job={"search": {"collection": "librivoxaudio"}})
+    assert cfg.search.collection == ["librivoxaudio"]
+
+
+def test_scalar_coercion_covers_all_string_list_fields():
+    cfg = Config.build(
+        job={
+            "search": {"mediatype": "audio", "subject": "jazz"},
+            "files": {"formats": "Flac"},
+        }
+    )
+    assert cfg.search.mediatype == ["audio"]
+    assert cfg.search.subject == ["jazz"]
+    assert cfg.files.formats == ["Flac"]
+
+
+def test_non_dict_section_raises_config_error():
+    # 'files: [Flac]' deve dare l'errore di config, non un AttributeError
+    with pytest.raises(ValueError, match="Flac"):
+        Config.build(job={"files": ["Flac"]})
+
+
+def test_flat_prefer_groups_are_nested():
+    # prefer: [Flac, VBR MP3] scritto piatto = un gruppo per formato
+    cfg = Config.build(job={"files": {"prefer": ["Flac", "VBR MP3"]}})
+    assert cfg.files.prefer == [["Flac"], ["VBR MP3"]]
+
+
+def test_scalar_prefer_string_becomes_single_group():
+    # prefer: Flac (scalare) = un unico gruppo da un formato
+    cfg = Config.build(job={"files": {"prefer": "Flac"}})
+    assert cfg.files.prefer == [["Flac"]]
+
+
+def test_malformed_prefer_passes_through_unchanged():
+    # prefer non-stringa e non-lista (es. un intero): la coercizione non lo
+    # tocca e lo lascia passare cosi' com'e' (nessuna forma da normalizzare)
+    cfg = Config.build(job={"files": {"prefer": 42}})
+    assert cfg.files.prefer == 42
+
+
+def test_files_section_with_only_source_leaves_formats_and_prefer():
+    # un livello che tocca solo source non deve azzerare formats/prefer
+    cfg = Config.build(profile="corpus", job={"files": {"source": "derivative"}})
+    assert cfg.files.source == "derivative"
+    assert cfg.files.prefer == [["Flac", "AIFF", "WAVE"], ["VBR MP3", "Ogg Vorbis"]]
+
+
+def test_formats_override_clears_inherited_prefer():
+    # il profilo corpus imposta prefer; --formats a un livello sopra deve
+    # vincere, non essere ignorato perche' prefer ha la precedenza
+    cfg = Config.build(profile="corpus", overrides={"files": {"formats": ["VBR MP3"]}})
+    assert cfg.files.formats == ["VBR MP3"]
+    assert cfg.files.prefer == []
+
+
+def test_prefer_override_clears_inherited_formats():
+    cfg = Config.build(
+        job={"files": {"formats": ["Flac"]}},
+        overrides={"files": {"prefer": [["VBR MP3"]]}},
+    )
+    assert cfg.files.prefer == [["VBR MP3"]]
+    assert cfg.files.formats == []
+
+
 def test_list_profiles_returns_bundled_presets():
     assert list_profiles() == ["corpus", "dataset", "mirror"]
 
