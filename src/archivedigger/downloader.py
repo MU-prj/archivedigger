@@ -61,26 +61,46 @@ class Downloader:
         self.file_selection = build_file_selection(config.files)
         self.layout = build_layout(config.download)
         self.resume = build_resume_policy(config.download)
-        seen = manifest.seen_md5() if manifest else None
-        self.file_filter = build_file_filter(config.filters, seen)
+        # Il set di MD5 dal manifest serve solo al dedup: senza dedup attivo
+        # evitiamo di leggere (e ri-parsare) l'intero JSONL a ogni run.
+        self._seen_md5 = (
+            manifest.seen_md5() if manifest and config.filters.dedup else None
+        )
         self.manifest = manifest
+        self.plan_errors: list[tuple[str, Exception]] = []
         self._lock = threading.Lock()
 
     def plan(self) -> list[PlannedFile]:
-        """Ricerca + selezione file, senza scaricare (usato anche dal dry-run)."""
+        """Ricerca + selezione file, senza scaricare (usato anche dal dry-run).
+
+        Un item guasto (metadati illeggibili, 503 sul fetch, item oscurato) non
+        deve uccidere il batch: con ignore_errors finisce in `plan_errors` e
+        si prosegue, coerente con il contratto di `_process` sul download.
+        """
         from .query import build_query
 
         query = build_query(self.config.search)
         destdir = Path(self.config.download.destdir)
+        # Catena costruita a ogni plan(): Md5DedupFilter e' stateful e riusare
+        # la stessa istanza tra estimate() e run() farebbe vedere alla seconda
+        # chiamata tutti gli MD5 come gia' visti (zero file processati).
+        file_filter = build_file_filter(self.config.filters, self._seen_md5)
+        self.plan_errors = []
         planned: list[PlannedFile] = []
         for identifier in self.client.search(
             query,
             sort=self.config.search.sort,
             max_items=self.config.search.max_items,
         ):
-            item = self.client.get_item(identifier)
+            try:
+                item = self.client.get_item(identifier)
+            except Exception as exc:  # noqa: BLE001 - stesso contratto di _process
+                if not self.config.download.ignore_errors:
+                    raise
+                self.plan_errors.append((identifier, exc))
+                continue
             selected = self.file_selection.select(item.files)
-            selected = self.file_filter.apply(selected)
+            selected = file_filter.apply(selected)
             for f in selected:
                 planned.append(PlannedFile(item, f, self.layout.path_for(destdir, item, f)))
         return planned
@@ -101,6 +121,15 @@ class Downloader:
         report = DownloadReport()
         planned = self._apply_budget(self.plan())
         report.items = len({p.item.identifier for p in planned})
+
+        for identifier, exc in self.plan_errors:
+            record = ManifestRecord(
+                identifier=identifier, file="", status="error", error=str(exc)
+            )
+            report.errors += 1
+            report.records.append(record)
+            if self.manifest is not None:
+                self.manifest.append(record)
 
         workers = max(1, self.config.download.workers)
         if workers == 1 or self.config.download.dry_run:
@@ -132,13 +161,15 @@ class Downloader:
             self._record(report, item, file, path, "dry-run")
             return
 
-        if self.resume.should_skip(path, file):
-            with self._lock:
-                report.skipped += 1
-            self._record(report, item, file, path, "skipped")
-            return
-
         try:
+            # anche should_skip puo' fallire (path che e' una directory, file
+            # illeggibile durante l'hash): va trattato come errore del file,
+            # non come crash del batch.
+            if self.resume.should_skip(path, file):
+                with self._lock:
+                    report.skipped += 1
+                self._record(report, item, file, path, "skipped")
+                return
             self._download_with_retry(item, file, path)
         except Exception as exc:  # noqa: BLE001 - l'errore va nel manifest, non ferma il batch
             with self._lock:
