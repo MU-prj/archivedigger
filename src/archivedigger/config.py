@@ -115,6 +115,13 @@ class Config:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Config:
         """Costruisce una Config da un dizionario gia' fuso (sezioni parziali)."""
+        unknown = set(data) - set(_SECTIONS) - {"profile"}
+        if unknown:
+            available = ", ".join(_SECTIONS)
+            raise ValueError(
+                f"Sezioni sconosciute: {', '.join(sorted(unknown))}. "
+                f"Disponibili: {available}"
+            )
         kwargs: dict[str, Any] = {}
         for name, section_cls in _SECTIONS.items():
             section_data = data.get(name) or {}
@@ -131,7 +138,21 @@ def _build_section(section_cls: type, data: dict[str, Any]):
         raise ValueError(
             f"Campi sconosciuti per {section_cls.__name__}: {', '.join(sorted(unknown))}"
         )
-    return section_cls(**data)
+    # In YAML e' naturale scrivere un valore singolo dove il campo e' una lista
+    # (collection: librivoxaudio): senza coercizione, list("stringa") a valle
+    # esploderebbe il valore in caratteri. Coerciamo str -> [str].
+    coerced = {
+        key: [value]
+        if isinstance(value, str) and _is_string_list_field(section_cls, key)
+        else value
+        for key, value in data.items()
+    }
+    return section_cls(**coerced)
+
+
+def _is_string_list_field(section_cls: type, name: str) -> bool:
+    # Le annotazioni sono stringhe (from __future__ import annotations).
+    return any(f.name == name and f.type == "list[str]" for f in fields(section_cls))
 
 
 def _deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> None:

@@ -51,6 +51,30 @@ def test_unknown_field_in_section_raises():
         Config.build(job={"download": {"workerz": 8}})
 
 
+def test_unknown_top_level_section_raises():
+    # il typo "filter:" non deve far sparire silenziosamente tutti i filtri
+    with pytest.raises(ValueError, match="filter"):
+        Config.build(job={"filter": {"min_duration": 5}})
+
+
+def test_scalar_string_coerced_to_list_field():
+    # in YAML e' naturale scrivere collection: librivoxaudio (scalare)
+    cfg = Config.build(job={"search": {"collection": "librivoxaudio"}})
+    assert cfg.search.collection == ["librivoxaudio"]
+
+
+def test_scalar_coercion_covers_all_string_list_fields():
+    cfg = Config.build(
+        job={
+            "search": {"mediatype": "audio", "subject": "jazz"},
+            "files": {"formats": "Flac"},
+        }
+    )
+    assert cfg.search.mediatype == ["audio"]
+    assert cfg.search.subject == ["jazz"]
+    assert cfg.files.formats == ["Flac"]
+
+
 def test_list_profiles_returns_bundled_presets():
     assert list_profiles() == ["corpus", "dataset", "mirror"]
 
