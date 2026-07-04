@@ -16,19 +16,18 @@ from .manifest import Manifest
 from .query import build_query
 
 
-def _manifest_for(config: Config) -> Manifest | None:
+def _manifest_for(config: Config) -> Manifest:
     """Il manifest della run: quello configurato, o il default promesso.
 
     README e profili presentano il manifest (e il dedup MD5 seminato da li')
     come comportamento di base: senza un default, 'archivedigger run' seguito
     da 'export-manifest ./downloads/manifest.jsonl' esportava zero righe e il
-    dedup tra run era inerte. Il default si disattiva solo nel dry-run, che
-    non deve lasciare tracce su disco.
+    dedup tra run era inerte. Anche dry-run ed estimate lo LEGGONO (per il
+    dedup seminato, cosi' l'anteprima combacia con la run reale), ma non vi
+    scrivono: e' il Downloader a non registrare i record dry-run.
     """
     if config.download.manifest:
         return Manifest(config.download.manifest)
-    if config.download.dry_run:
-        return None
     return Manifest(Path(config.download.destdir) / "manifest.jsonl")
 
 

@@ -104,3 +104,35 @@ def test_dry_run_leaves_no_default_manifest(tmp_path):
     cfg = Config.build(job={"download": {"destdir": str(tmp_path), "dry_run": True}})
     api.dig(cfg, client=FakeClient([_item()]))
     assert not (tmp_path / "manifest.jsonl").exists()
+
+
+def test_dry_run_reads_manifest_for_dedup_parity(tmp_path):
+    # l'anteprima deve dedup-are come la run reale: il manifest va letto
+    # (senza scriverci) anche in dry-run
+    from archivedigger.manifest import Manifest, ManifestRecord
+
+    Manifest(tmp_path / "manifest.jsonl").append(
+        ManifestRecord(identifier="old", file="a.flac", md5="m1", status="downloaded")
+    )
+    files = [IAFile(name="a.flac", format="Flac", size=10, md5="m1")]
+    cfg = Config.build(
+        job={
+            "download": {"destdir": str(tmp_path), "dry_run": True},
+            "filters": {"dedup": True},
+        }
+    )
+    report = api.dig(cfg, client=FakeClient([IAItem("i1", {}, files)]))
+    assert report.records == []  # gia' visto: la run reale lo salterebbe
+    # e il manifest non e' stato toccato dall'anteprima
+    assert len(Manifest(tmp_path / "manifest.jsonl").records()) == 1
+
+
+def test_estimate_surfaces_plan_errors(tmp_path):
+    class BrokenClient(FakeClient):
+        def get_item(self, identifier):
+            raise ConnectionError("503")
+
+    cfg = Config.build(job={"download": {"destdir": str(tmp_path)}})
+    est = api.estimate(cfg, client=BrokenClient([_item()]))
+    assert est.files == 0
+    assert est.errors == 1  # non 'la query non matcha nulla'

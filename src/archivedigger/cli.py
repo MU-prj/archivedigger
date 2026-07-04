@@ -242,7 +242,9 @@ def main(argv: list[str] | None = None, client: Client | None = None) -> int:
                 f"attenzione: {est.files_unknown_size} file senza dimensione "
                 "nei metadati (contano 0 nel totale e sfuggono al budget)"
             )
-        return 0
+        if est.errors:
+            print(f"attenzione: {est.errors} item non leggibili (esclusi dalla stima)")
+        return 0 if est.errors == 0 else 1
 
     report = api.dig(config, client=client)
     print(

@@ -41,6 +41,9 @@ class Estimate:
     # file senza 'size' nei metadati IA: contano 0 in `bytes` e sfuggono al
     # budget, quindi vanno almeno dichiarati invece di sparire nella stima
     files_unknown_size: int = 0
+    # item il cui fetch dei metadati e' fallito durante plan(): la stima deve
+    # dichiararli come farebbe run(), non fingere che la query non matchi nulla
+    errors: int = 0
 
     @property
     def gigabytes(self) -> float:
@@ -119,6 +122,7 @@ class Downloader:
             files=len(planned),
             bytes=sum(p.file.size or 0 for p in planned),
             files_unknown_size=sum(1 for p in planned if p.file.size is None),
+            errors=len(self.plan_errors),
         )
 
     def run(self) -> DownloadReport:
@@ -216,7 +220,9 @@ class Downloader:
         )
         with self._lock:
             report.records.append(record)
-            if self.manifest is not None:
+            # il dry-run legge il manifest (dedup) ma non deve scriverlo:
+            # nessuna traccia su disco da un'anteprima
+            if self.manifest is not None and status != "dry-run":
                 self.manifest.append(record)
 
     def _budget_bytes(self) -> int | None:
