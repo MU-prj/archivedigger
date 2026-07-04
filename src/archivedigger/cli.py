@@ -111,7 +111,7 @@ def _add_common_flags(p: argparse.ArgumentParser) -> None:
     p.add_argument("--prefer")
     p.add_argument("--glob")
     p.add_argument("--exclude-glob", dest="exclude_glob")
-    p.add_argument("--source", choices=["original", "derivative"])
+    p.add_argument("--source", choices=["any", "original", "derivative"])
     # filtri file
     p.add_argument("--min-duration", dest="min_duration")
     p.add_argument("--max-duration", dest="max_duration")

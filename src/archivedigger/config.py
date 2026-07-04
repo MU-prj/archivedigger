@@ -52,7 +52,7 @@ class FilesConfig:
     prefer: list[list[str]] = field(default_factory=list)
     glob: str | None = None
     exclude_glob: str | None = None
-    source: str = "original"
+    source: str = "any"  # any | original | derivative
 
 
 @dataclass

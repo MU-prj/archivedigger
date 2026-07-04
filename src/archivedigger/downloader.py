@@ -19,7 +19,7 @@ from pathlib import Path
 from .client import Client
 from .config import Config
 from .filters import build_file_filter
-from .formats import build_format_strategy
+from .formats import build_file_selection
 from .layout import build_layout
 from .manifest import Manifest, ManifestRecord
 from .models import IAFile, IAItem
@@ -58,7 +58,7 @@ class Downloader:
     def __init__(self, client: Client, config: Config, manifest: Manifest | None = None):
         self.client = client
         self.config = config
-        self.format_strategy = build_format_strategy(config.files)
+        self.file_selection = build_file_selection(config.files)
         self.layout = build_layout(config.download)
         self.resume = build_resume_policy(config.download)
         seen = manifest.seen_md5() if manifest else None
@@ -79,7 +79,7 @@ class Downloader:
             max_items=self.config.search.max_items,
         ):
             item = self.client.get_item(identifier)
-            selected = self.format_strategy.select(item.files)
+            selected = self.file_selection.select(item.files)
             selected = self.file_filter.apply(selected)
             for f in selected:
                 planned.append(PlannedFile(item, f, self.layout.path_for(destdir, item, f)))
