@@ -38,6 +38,9 @@ class Estimate:
     items: int = 0
     files: int = 0
     bytes: int = 0
+    # file senza 'size' nei metadati IA: contano 0 in `bytes` e sfuggono al
+    # budget, quindi vanno almeno dichiarati invece di sparire nella stima
+    files_unknown_size: int = 0
 
     @property
     def gigabytes(self) -> float:
@@ -115,6 +118,7 @@ class Downloader:
             items=len({p.item.identifier for p in planned}),
             files=len(planned),
             bytes=sum(p.file.size or 0 for p in planned),
+            files_unknown_size=sum(1 for p in planned if p.file.size is None),
         )
 
     def run(self) -> DownloadReport:

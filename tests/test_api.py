@@ -51,6 +51,18 @@ def test_estimate_reports_items_files_and_bytes(tmp_path):
     assert est.bytes == 1 + 600 + 400  # _item() ha un file da 1 byte
 
 
+def test_estimate_counts_files_with_unknown_size(tmp_path):
+    files = [
+        IAFile(name="a.flac", format="Flac", size=600),
+        IAFile(name="b.flac", format="Flac", size=None),  # metadati sporchi
+    ]
+    cfg = Config.build(job={"download": {"destdir": str(tmp_path)}})
+    est = api.estimate(cfg, client=FakeClient([IAItem("i1", {}, files)]))
+    assert est.files == 2
+    assert est.bytes == 600
+    assert est.files_unknown_size == 1
+
+
 def test_estimate_respects_budget(tmp_path):
     files = [IAFile(name=f"{i}.flac", format="Flac", size=1024**3) for i in range(5)]
     items = [IAItem(f"i{i}", {"collection": "x"}, [f]) for i, f in enumerate(files)]

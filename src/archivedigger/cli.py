@@ -240,6 +240,11 @@ def main(argv: list[str] | None = None, client: Client | None = None) -> int:
             f"item: {est.items}  file: {est.files}  "
             f"totale: {est.bytes} byte ({est.gigabytes:.2f} GB)"
         )
+        if est.files_unknown_size:
+            print(
+                f"attenzione: {est.files_unknown_size} file senza dimensione "
+                "nei metadati (contano 0 nel totale e sfuggono al budget)"
+            )
         return 0
 
     report = api.dig(config, client=client)
