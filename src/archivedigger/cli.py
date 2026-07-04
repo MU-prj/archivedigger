@@ -146,17 +146,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="archivedigger")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    run_p = sub.add_parser("run", help="Cerca e scarica secondo il job/flag")
-    run_p.add_argument("job", nargs="?", help="File YAML del job (opzionale)")
-    _add_common_flags(run_p)
-
-    search_p = sub.add_parser("search", help="Solo ricerca, stampa gli identifier")
-    search_p.add_argument("job", nargs="?")
-    _add_common_flags(search_p)
-
-    est_p = sub.add_parser("estimate", help="Dry-run: stima item/file/GB")
-    est_p.add_argument("job", nargs="?")
-    _add_common_flags(est_p)
+    for name, help_text in [
+        ("run", "Cerca e scarica secondo il job/flag"),
+        ("search", "Solo ricerca, stampa gli identifier"),
+        ("estimate", "Dry-run: stima item/file/GB"),
+    ]:
+        p = sub.add_parser(name, help=help_text)
+        p.add_argument("job", nargs="?", help="File YAML del job (opzionale)")
+        _add_common_flags(p)
 
     exp_p = sub.add_parser("export-manifest", help="Esporta un manifest JSONL in CSV")
     exp_p.add_argument("manifest_path")

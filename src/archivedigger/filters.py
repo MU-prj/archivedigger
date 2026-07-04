@@ -83,7 +83,7 @@ class MaxFilesPerItemFilter:
         self.limit = limit
 
     def apply(self, files: list[IAFile]) -> list[IAFile]:
-        return files[: self.limit] if self.limit is not None else files
+        return files[: self.limit]
 
 
 class FilterChain:
