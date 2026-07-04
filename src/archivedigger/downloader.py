@@ -194,16 +194,17 @@ class Downloader:
 
     def _download_with_retry(self, item: IAItem, file: IAFile, path: Path) -> None:
         # retries = tentativi AGGIUNTIVI dopo il primo (retries: 3 -> 4 tentativi);
-        # prima valeva come totale, quindi retries: 1 non ritentava affatto
-        attempts = 1 + max(0, self.config.download.retries)
-        for attempt in range(attempts):
+        # prima valeva come totale, quindi retries: 1 non ritentava affatto.
+        # I ritentativi girano nel loop; l'ultimo tentativo e' fuori, cosi' il
+        # suo errore propaga senza un ramo di uscita irraggiungibile.
+        retries = max(0, self.config.download.retries)
+        for attempt in range(retries):
             try:
                 self.client.download_file(item, file, path)
                 return
             except Exception:
-                if attempt + 1 >= attempts:
-                    raise
                 time.sleep(min(2**attempt, 30))
+        self.client.download_file(item, file, path)
 
     def _record(self, report, item, file, path, status, error=None) -> None:
         record = ManifestRecord(

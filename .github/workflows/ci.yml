@@ -32,5 +32,7 @@ jobs:
       - name: Lint (ruff)
         run: python -m ruff check src tests
 
-      - name: Test unit (offline)
-        run: python -m pytest
+      - name: Test unit (offline) con gate di copertura al 100%
+        run: |
+          python -m coverage run -m pytest
+          python -m coverage report

@@ -21,8 +21,19 @@ def test_parse_size_none_passthrough():
 
 
 def test_parse_size_rejects_garbage():
-    with pytest.raises(ValueError):
-        parse_size("abc")
+    with pytest.raises(ValueError, match="sconosciuta"):
+        parse_size("abc")  # unita' sconosciuta
+
+
+def test_parse_size_rejects_empty():
+    with pytest.raises(ValueError, match="vuota"):
+        parse_size("   ")
+
+
+def test_parse_size_rejects_missing_number():
+    # unita' valida ma nessun numero davanti ("M" -> magnitudine assente)
+    with pytest.raises(ValueError, match="non valida"):
+        parse_size("M")
 
 
 def test_parse_duration_seconds():
@@ -37,3 +48,13 @@ def test_parse_duration_clock_format():
 
 def test_parse_duration_none_passthrough():
     assert parse_duration(None) is None
+
+
+def test_parse_duration_rejects_empty_clock_part():
+    with pytest.raises(ValueError, match="non valida"):
+        parse_duration(":30")
+
+
+def test_parse_duration_rejects_non_numeric():
+    with pytest.raises(ValueError, match="non valida"):
+        parse_duration("n/a")

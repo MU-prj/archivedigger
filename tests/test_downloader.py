@@ -178,6 +178,40 @@ def test_broken_item_propagates_when_not_ignoring(tmp_path):
         Downloader(client, cfg).run()
 
 
+def test_plan_error_is_written_to_manifest(tmp_path):
+    from archivedigger.manifest import Manifest
+
+    manifest = Manifest(tmp_path / "manifest.jsonl")
+    client = BrokenItemClient([_item("ok1")], broken="dark1")
+    Downloader(client, _config(tmp_path, ignore_errors=True), manifest=manifest).run()
+    records = Manifest(tmp_path / "manifest.jsonl").records()
+    errors = [r for r in records if r.status == "error"]
+    assert [r.identifier for r in errors] == ["dark1"]
+
+
+def test_budget_not_reached_keeps_whole_plan(tmp_path):
+    # budget impostato ma mai raggiunto: il loop completa senza tagliare
+    files = [IAFile(name=f"{i}.flac", format="Flac", size=1) for i in range(3)]
+    items = [_item(identifier=f"i{i}", files=[f]) for i, f in enumerate(files)]
+    cfg = Config.build(job={"download": {"destdir": str(tmp_path), "size_budget_gb": 100}})
+    report = Downloader(FakeClient(items), cfg).run()
+    assert report.downloaded == 3
+
+
+def test_dedup_keeps_files_without_md5(tmp_path):
+    # un file senza md5 non puo' essere dedotto: passa sempre, non entra nel set
+    files = [
+        IAFile(name="a.flac", format="Flac", size=1, md5=None),
+        IAFile(name="b.flac", format="Flac", size=1, md5=None),
+    ]
+    cfg = Config.build(
+        job={"download": {"destdir": str(tmp_path), "layout": "item"}, "filters": {"dedup": True}}
+    )
+    client = FakeClient([_item(files=files)])
+    Downloader(client, cfg).run()
+    assert sorted(client.downloaded) == ["a.flac", "b.flac"]
+
+
 def test_estimate_then_run_on_same_downloader_with_dedup(tmp_path):
     # Md5DedupFilter e' stateful: estimate() non deve avvelenare il run()
     files = [IAFile(name="a.flac", format="Flac", size=10, md5="m1")]

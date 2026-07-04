@@ -46,6 +46,21 @@ def test_max_items_zero_means_unlimited():
     assert ids == ["0", "1", "2", "3", "4"]
 
 
+def test_lazy_resolves_real_library_when_not_injected(monkeypatch):
+    # senza funzioni iniettate, il client risolve i simboli della libreria vera
+    import sys
+    import types
+
+    fake_ia = types.ModuleType("internetarchive")
+    fake_ia.search_items = lambda *a, **k: iter([])
+    fake_ia.get_item = lambda ident: FakeItem(ident, {}, [])
+    monkeypatch.setitem(sys.modules, "internetarchive", fake_ia)
+
+    client = InternetArchiveClient()  # nessuna iniezione
+    assert client._search_items() is fake_ia.search_items
+    assert client._get_item() is fake_ia.get_item
+
+
 def test_search_error_row_raises_with_real_message():
     # su errore l'API scrape emette una riga {'error': ...} prima di fermarsi
     import pytest

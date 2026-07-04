@@ -87,6 +87,26 @@ def test_flat_prefer_groups_are_nested():
     assert cfg.files.prefer == [["Flac"], ["VBR MP3"]]
 
 
+def test_scalar_prefer_string_becomes_single_group():
+    # prefer: Flac (scalare) = un unico gruppo da un formato
+    cfg = Config.build(job={"files": {"prefer": "Flac"}})
+    assert cfg.files.prefer == [["Flac"]]
+
+
+def test_malformed_prefer_passes_through_unchanged():
+    # prefer non-stringa e non-lista (es. un intero): la coercizione non lo
+    # tocca e lo lascia passare cosi' com'e' (nessuna forma da normalizzare)
+    cfg = Config.build(job={"files": {"prefer": 42}})
+    assert cfg.files.prefer == 42
+
+
+def test_files_section_with_only_source_leaves_formats_and_prefer():
+    # un livello che tocca solo source non deve azzerare formats/prefer
+    cfg = Config.build(profile="corpus", job={"files": {"source": "derivative"}})
+    assert cfg.files.source == "derivative"
+    assert cfg.files.prefer == [["Flac", "AIFF", "WAVE"], ["VBR MP3", "Ogg Vorbis"]]
+
+
 def test_formats_override_clears_inherited_prefer():
     # il profilo corpus imposta prefer; --formats a un livello sopra deve
     # vincere, non essere ignorato perche' prefer ha la precedenza

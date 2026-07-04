@@ -20,6 +20,7 @@ dependencies = [
 dev = [
     "pytest>=8.0",
     "ruff>=0.4",
+    "coverage>=7.0",
 ]
 
 [project.scripts]
@@ -40,6 +41,16 @@ markers = [
     "integration: test che toccano Internet Archive reale (esclusi di default)",
 ]
 addopts = "-m 'not integration'"
+
+[tool.coverage.run]
+branch = true
+source = ["src/archivedigger"]
+
+[tool.coverage.report]
+# La suite copre il 100% di righe e branch del package: la CI fallisce sotto,
+# cosi' ogni nuova funzionalita' arriva con i suoi test.
+fail_under = 100
+show_missing = true
 
 [tool.ruff]
 line-length = 100

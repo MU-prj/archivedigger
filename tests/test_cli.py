@@ -47,6 +47,13 @@ def test_prefer_flag_is_parsed_into_groups():
     assert ov["files"]["prefer"] == [["Flac", "AIFF", "WAVE"], ["VBR MP3"]]
 
 
+def test_prefer_skips_empty_groups():
+    from archivedigger.cli import parse_prefer
+
+    # separatori spuri (gruppi vuoti) vengono ignorati, non producono [[]]
+    assert parse_prefer("Flac>>VBR MP3>") == [["Flac"], ["VBR MP3"]]
+
+
 def test_boolean_flags():
     ov = _overrides(["--dry-run", "--dedup"])
     assert ov["download"]["dry_run"] is True
