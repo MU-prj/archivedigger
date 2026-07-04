@@ -185,7 +185,9 @@ class Downloader:
         self._record(report, item, file, path, "downloaded")
 
     def _download_with_retry(self, item: IAItem, file: IAFile, path: Path) -> None:
-        attempts = max(1, self.config.download.retries)
+        # retries = tentativi AGGIUNTIVI dopo il primo (retries: 3 -> 4 tentativi);
+        # prima valeva come totale, quindi retries: 1 non ritentava affatto
+        attempts = 1 + max(0, self.config.download.retries)
         for attempt in range(attempts):
             try:
                 self.client.download_file(item, file, path)

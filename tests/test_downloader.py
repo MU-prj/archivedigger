@@ -104,7 +104,7 @@ class ExplodingClient(FakeClient):
 
 def test_error_is_isolated_when_ignore_errors(tmp_path):
     client = ExplodingClient([_item()])
-    report = Downloader(client, _config(tmp_path, ignore_errors=True, retries=1)).run()
+    report = Downloader(client, _config(tmp_path, ignore_errors=True, retries=0)).run()
     assert report.errors == 1
     assert report.downloaded == 0
     assert report.records[0].status == "error"
@@ -115,9 +115,34 @@ def test_error_propagates_when_not_ignoring(tmp_path):
     import pytest
 
     client = ExplodingClient([_item()])
-    cfg = _config(tmp_path, ignore_errors=False, retries=1)
+    cfg = _config(tmp_path, ignore_errors=False, retries=0)
     with pytest.raises(OSError, match="network down"):
         Downloader(client, cfg).run()
+
+
+class CountingExplodingClient(FakeClient):
+    def __init__(self, items):
+        super().__init__(items)
+        self.attempts = 0
+
+    def download_file(self, item, file, local_path):
+        self.attempts += 1
+        raise OSError("network down")
+
+
+def test_retries_means_additional_attempts(tmp_path, monkeypatch):
+    import time as _time
+
+    monkeypatch.setattr(_time, "sleep", lambda s: None)
+    client = CountingExplodingClient([_item()])
+    Downloader(client, _config(tmp_path, ignore_errors=True, retries=2)).run()
+    assert client.attempts == 3  # 1 tentativo + 2 retry
+
+
+def test_retries_zero_means_single_attempt(tmp_path):
+    client = CountingExplodingClient([_item()])
+    Downloader(client, _config(tmp_path, ignore_errors=True, retries=0)).run()
+    assert client.attempts == 1
 
 
 class BrokenItemClient(FakeClient):
