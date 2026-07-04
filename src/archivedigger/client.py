@@ -84,6 +84,7 @@ class InternetArchiveClient:
         e per-chiamata elimina (1) e (2); la verifica dell'atterraggio
         elimina (3).
         """
+        import os
         import shutil
         import tempfile
 
@@ -98,7 +99,10 @@ class InternetArchiveClient:
                 destdir=staging,
                 no_directory=True,
                 verbose=False,
-                retries=0,  # i retry con backoff sono del Downloader, non doppi
+                # i retry con backoff sono del Downloader: qui il minimo
+                # possibile (la libreria coercisce 0 al default con
+                # 'retries = retries or 2', quindi 1 e' il pavimento)
+                retries=1,
             )
             landed = [p for p in Path(staging).rglob("*") if p.is_file()]
             if not landed:
@@ -106,6 +110,10 @@ class InternetArchiveClient:
                     f"{item.identifier}/{file.name}: la libreria non ha "
                     "scaricato nulla (item oscurato o nome file inesistente?)"
                 )
-            shutil.move(str(landed[0]), str(local_path))
+            # os.replace (stesso filesystem: staging vive in destdir) e' atomico
+            # e fallisce forte se local_path e' una directory — shutil.move
+            # sposterebbe il file DENTRO la directory, registrando un percorso
+            # sbagliato come 'downloaded'
+            os.replace(landed[0], local_path)
         finally:
             shutil.rmtree(staging, ignore_errors=True)
