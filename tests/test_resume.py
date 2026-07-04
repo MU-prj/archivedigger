@@ -46,6 +46,22 @@ def test_checksum_without_expected_md5_uses_existence(tmp_path):
     assert ChecksumResume().should_skip(p, IAFile(name="a.flac", md5=None)) is True
 
 
+def test_checksum_redownloads_truncated_file_even_without_md5(tmp_path):
+    # crash a meta' download di un file senza md5 nei metadati: la dimensione
+    # attesa basta a smascherare il troncamento (prima restava corrotto per sempre)
+    p = tmp_path / "a.flac"
+    p.write_bytes(b"half")
+    f = IAFile(name="a.flac", md5=None, size=1000)
+    assert ChecksumResume().should_skip(p, f) is False
+
+
+def test_checksum_size_mismatch_short_circuits_before_hashing(tmp_path):
+    p = tmp_path / "a.flac"
+    _write(p, b"corrupted-and-longer")
+    f = IAFile(name="a.flac", md5="deadbeef", size=5)
+    assert ChecksumResume().should_skip(p, f) is False
+
+
 def test_force_never_skips(tmp_path):
     p = tmp_path / "a.flac"
     _write(p)
