@@ -36,6 +36,24 @@ def test_lista_vuota_diventa_none():
     assert f.length is None
 
 
+def test_format_lista_prende_il_primo_valore():
+    # tag ripetuto in files.xml: una lista qui sarebbe unhashable nelle strategy
+    f = IAFile.from_dict({"name": "a.mp3", "format": ["VBR MP3", "MP3"]})
+    assert f.format == "VBR MP3"
+
+
+def test_name_e_md5_lista_prendono_il_primo_valore():
+    f = IAFile.from_dict({"name": ["a.wav"], "md5": ["abc", "def"], "source": ["original"]})
+    assert f.name == "a.wav"
+    assert f.md5 == "abc"
+    assert f.source == "original"
+
+
+def test_name_mancante_diventa_stringa_vuota():
+    f = IAFile.from_dict({})
+    assert f.name == ""
+
+
 def test_metadati_puliti_restano_intatti():
     f = IAFile.from_dict({"name": "a.wav", "size": "1000",
                           "length": "1:30", "format": "WAVE"})

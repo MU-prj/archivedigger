@@ -33,13 +33,15 @@ class IAFile:
         """
         from .units import parse_duration
 
+        # anche i campi stringa arrivano sporchi: un 'format' lista (tag
+        # ripetuto in files.xml) sarebbe unhashable nei set delle strategy
         return cls(
-            name=data.get("name", ""),
-            format=data.get("format"),
+            name=_lenient(str, data.get("name")) or "",
+            format=_lenient(str, data.get("format")),
             size=_lenient(int, data.get("size")),
-            md5=data.get("md5"),
+            md5=_lenient(str, data.get("md5")),
             length=_lenient(parse_duration, data.get("length")),
-            source=data.get("source"),
+            source=_lenient(str, data.get("source")),
         )
 
 
