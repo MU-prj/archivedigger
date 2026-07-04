@@ -104,12 +104,12 @@ class Config:
         """Costruisce una Config stratificando i livelli in ordine di precedenza."""
         merged: dict[str, Any] = {}
         if profile is not None:
-            _deep_merge(merged, load_profile(profile))
+            _merge_layer(merged, load_profile(profile))
             merged["profile"] = profile
         if job is not None:
-            _deep_merge(merged, job)
+            _merge_layer(merged, job)
         if overrides is not None:
-            _deep_merge(merged, overrides)
+            _merge_layer(merged, overrides)
         return cls.from_dict(merged)
 
     @classmethod
@@ -140,19 +140,43 @@ def _build_section(section_cls: type, data: dict[str, Any]):
         )
     # In YAML e' naturale scrivere un valore singolo dove il campo e' una lista
     # (collection: librivoxaudio): senza coercizione, list("stringa") a valle
-    # esploderebbe il valore in caratteri. Coerciamo str -> [str].
+    # esploderebbe il valore in caratteri. Idem per i gruppi di prefer scritti
+    # piatti (prefer: [Flac, VBR MP3] invece di liste annidate).
     coerced = {
-        key: [value]
-        if isinstance(value, str) and _is_string_list_field(section_cls, key)
-        else value
+        key: _coerce_list_shapes(_field_type(section_cls, key), value)
         for key, value in data.items()
     }
     return section_cls(**coerced)
 
 
-def _is_string_list_field(section_cls: type, name: str) -> bool:
+def _field_type(section_cls: type, name: str) -> str | None:
     # Le annotazioni sono stringhe (from __future__ import annotations).
-    return any(f.name == name and f.type == "list[str]" for f in fields(section_cls))
+    return next((f.type for f in fields(section_cls) if f.name == name), None)
+
+
+def _coerce_list_shapes(field_type: str | None, value: Any) -> Any:
+    if field_type == "list[str]" and isinstance(value, str):
+        return [value]
+    if field_type == "list[list[str]]":
+        if isinstance(value, str):
+            return [[value]]
+        if isinstance(value, list):
+            return [[g] if isinstance(g, str) else g for g in value]
+    return value
+
+
+def _merge_layer(base: dict[str, Any], overlay: dict[str, Any]) -> None:
+    """Fonde un livello di config e risolve i campi mutuamente esclusivi."""
+    _deep_merge(base, overlay)
+    # formats e prefer sono modi ALTERNATIVI di selezione: un livello che ne
+    # sceglie esplicitamente uno azzera l'altro ereditato dai livelli sotto,
+    # altrimenti '--formats "VBR MP3"' su un profilo con prefer verrebbe
+    # ignorato in silenzio (prefer ha la precedenza nella strategy).
+    files = overlay.get("files") or {}
+    if files.get("formats") and not files.get("prefer"):
+        base["files"]["prefer"] = []
+    elif files.get("prefer") and not files.get("formats"):
+        base["files"]["formats"] = []
 
 
 def _deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> None:

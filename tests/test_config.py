@@ -75,6 +75,29 @@ def test_scalar_coercion_covers_all_string_list_fields():
     assert cfg.files.formats == ["Flac"]
 
 
+def test_flat_prefer_groups_are_nested():
+    # prefer: [Flac, VBR MP3] scritto piatto = un gruppo per formato
+    cfg = Config.build(job={"files": {"prefer": ["Flac", "VBR MP3"]}})
+    assert cfg.files.prefer == [["Flac"], ["VBR MP3"]]
+
+
+def test_formats_override_clears_inherited_prefer():
+    # il profilo corpus imposta prefer; --formats a un livello sopra deve
+    # vincere, non essere ignorato perche' prefer ha la precedenza
+    cfg = Config.build(profile="corpus", overrides={"files": {"formats": ["VBR MP3"]}})
+    assert cfg.files.formats == ["VBR MP3"]
+    assert cfg.files.prefer == []
+
+
+def test_prefer_override_clears_inherited_formats():
+    cfg = Config.build(
+        job={"files": {"formats": ["Flac"]}},
+        overrides={"files": {"prefer": [["VBR MP3"]]}},
+    )
+    assert cfg.files.prefer == [["VBR MP3"]]
+    assert cfg.files.formats == []
+
+
 def test_list_profiles_returns_bundled_presets():
     assert list_profiles() == ["corpus", "dataset", "mirror"]
 
