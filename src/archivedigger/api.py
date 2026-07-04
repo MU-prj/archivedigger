@@ -7,6 +7,8 @@ iniettabile per i test; di default usa Internet Archive vero.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from .client import Client, InternetArchiveClient
 from .config import Config
 from .downloader import Downloader, DownloadReport, Estimate
@@ -14,18 +16,36 @@ from .manifest import Manifest
 from .query import build_query
 
 
+def _manifest_for(config: Config) -> Manifest | None:
+    """Il manifest della run: quello configurato, o il default promesso.
+
+    README e profili presentano il manifest (e il dedup MD5 seminato da li')
+    come comportamento di base: senza un default, 'archivedigger run' seguito
+    da 'export-manifest ./downloads/manifest.jsonl' esportava zero righe e il
+    dedup tra run era inerte. Il default si disattiva solo nel dry-run, che
+    non deve lasciare tracce su disco.
+    """
+    if config.download.manifest:
+        return Manifest(config.download.manifest)
+    if config.download.dry_run:
+        return None
+    return Manifest(Path(config.download.destdir) / "manifest.jsonl")
+
+
 def dig(config: Config, client: Client | None = None) -> DownloadReport:
     """Esegue ricerca + download secondo la Config; ritorna il report."""
     client = client or InternetArchiveClient()
-    manifest = Manifest(config.download.manifest) if config.download.manifest else None
-    return Downloader(client, config, manifest=manifest).run()
+    return Downloader(client, config, manifest=_manifest_for(config)).run()
 
 
 def estimate(config: Config, client: Client | None = None) -> Estimate:
-    """Stima item/file/byte che il download produrrebbe, senza scaricare."""
+    """Stima item/file/byte che il download produrrebbe, senza scaricare.
+
+    Legge lo stesso manifest della run reale (per il dedup seminato), ma non
+    vi scrive: la stima resta senza effetti collaterali.
+    """
     client = client or InternetArchiveClient()
-    manifest = Manifest(config.download.manifest) if config.download.manifest else None
-    return Downloader(client, config, manifest=manifest).estimate()
+    return Downloader(client, config, manifest=_manifest_for(config)).estimate()
 
 
 def search(config: Config, client: Client | None = None) -> list[str]:

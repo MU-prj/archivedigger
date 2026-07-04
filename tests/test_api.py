@@ -75,3 +75,20 @@ def test_dig_writes_manifest_when_configured(tmp_path):
     )
     api.dig(cfg, client=FakeClient([_item()]))
     assert len(Manifest(manifest_path).records()) == 1
+
+
+def test_dig_writes_default_manifest_in_destdir(tmp_path):
+    # il manifest e' promesso come comportamento di base: senza --manifest
+    # deve comunque nascere in <destdir>/manifest.jsonl
+    from archivedigger.manifest import Manifest
+
+    cfg = Config.build(job={"download": {"destdir": str(tmp_path)}})
+    api.dig(cfg, client=FakeClient([_item()]))
+    records = Manifest(tmp_path / "manifest.jsonl").records()
+    assert [r.status for r in records] == ["downloaded"]
+
+
+def test_dry_run_leaves_no_default_manifest(tmp_path):
+    cfg = Config.build(job={"download": {"destdir": str(tmp_path), "dry_run": True}})
+    api.dig(cfg, client=FakeClient([_item()]))
+    assert not (tmp_path / "manifest.jsonl").exists()
