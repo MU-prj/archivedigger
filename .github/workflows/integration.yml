@@ -1,0 +1,30 @@
+# Integration: esegue i test che toccano Internet Archive REALE.
+# Separato dalla CI delle PR perche' dipende dalla rete verso archive.org
+# (tempi imprevedibili, possibili flakey esterni): non deve bloccare i merge.
+# Si lancia a mano dalla tab Actions (workflow_dispatch) e una volta a settimana
+# come smoke test che il ponte con IA regga ancora.
+name: Integration (Internet Archive reale)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * 1" # lunedi' alle 06:00 UTC
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Installa il package con le dipendenze dev
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+
+      - name: Test integration (rete verso archive.org)
+        run: python -m pytest -m integration -v
